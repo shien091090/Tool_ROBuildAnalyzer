@@ -125,9 +125,12 @@ def test_get_value_substitution():
     assert lua_expr.safe_eval("get(7)", {}, ctx, None) == 42
 
 
-def test_get_value_missing_defaults_zero():
+def test_get_value_missing_tracks_and_returns_none():
+    # Deliberate change (7): a missing get(N) no longer defaults to 0 — it
+    # records "get:{N}" and safe_eval refuses to guess (returns None).
     ctx = _ctx(get_values={})
-    assert lua_expr.safe_eval("get(7)", {}, ctx, None) == 0
+    assert lua_expr.safe_eval("get(7)", {}, ctx, None) is None
+    assert "get:7" in ctx.missing_keys
 
 
 def test_grade_level_explicit_slot():
@@ -199,6 +202,26 @@ def test_safe_eval_none_when_missing_even_if_evaluable_without_it():
 def test_eval_condition_none_missing_set_not_empty_blocks_short_circuit():
     ok, missing = lua_expr.eval_condition("false && total_STR >= 90", {}, _ctx(), None)
     assert ok is None and "total_STR" in missing
+
+
+def test_get_value_34_substitutes_with_character_value():
+    # get(34) = VIT UI field (ItemSearchApp.py:2048 stat_fields), populated
+    # from the character file by aggregate.make_context.
+    ctx = _ctx(get_values={34: 100})
+    assert lua_expr.safe_eval("get(34)", {}, ctx, None) == 100
+
+
+def test_get_value_200_missing_none_and_recorded():
+    # get(200) = MHP; the character file has no such field (aggregate.
+    # GET_VALUE_FIELDS deliberately excludes it) so it always misses.
+    ctx = _ctx(get_values={})
+    assert lua_expr.safe_eval("get(200)", {}, ctx, None) is None
+    assert "get:200" in ctx.missing_keys
+
+
+def test_get_value_condition_missing_returns_none_and_missing_set():
+    ok, missing = lua_expr.eval_condition("get(200) > 0", {}, _ctx(get_values={}), None)
+    assert ok is None and missing == {"get:200"}
 
 
 # ---------------------------------------------------------------------------

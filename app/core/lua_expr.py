@@ -29,6 +29,12 @@ Deliberate behavioral changes from the original (binding, see M2 plan Task 5):
 6. ``GetPetRelationship()`` is ported as-is: it substitutes the *grade*
    value (same source as ``GetEquipGradeLevel(GetLocation())``). This is a
    quirk inherited from the original tool, not a bug introduced here.
+7. ``get(N)`` (character-stat UI field read, N->field per
+   ItemSearchApp.py:2048 stat_fields, see app/core/context.py
+   GET_FIELD_NAMES / app/core/aggregate.py GET_VALUE_FIELDS) is resolved via
+   ``ctx.get_value(N)`` instead of a raw dict ``.get(N, 0)``. A miss does NOT
+   substitute 0 — it records ``"get:{N}"`` in the missing-keys set and leaves
+   the call untouched, same shape as change (1)'s GetSkillLevel handling.
 """
 
 from __future__ import annotations
@@ -74,7 +80,18 @@ def normalize(
     missing: set[str] = set()
     expr = str(expr).strip()
 
-    expr = _RE_GET.sub(lambda m: str(ctx.get_values.get(int(m.group(1)), 0)), expr)
+    # Deliberate change (7, see module docstring): get(N) goes through
+    # ctx.get_value(), which records a miss ("get:{N}") instead of silently
+    # defaulting to 0 — mirrors GetSkillLevel's _sub_skill_level below.
+    def _sub_get_value(m: re.Match) -> str:
+        n = int(m.group(1))
+        value = ctx.get_value(n)
+        if value is None:
+            missing.add(f"get:{n}")
+            return m.group(0)
+        return str(value)
+
+    expr = _RE_GET.sub(_sub_get_value, expr)
     expr = _RE_REFINE_LOCATION.sub(
         lambda m: str(ctx.refine_inputs.get(current_slot, 0) if current_slot is not None else 0),
         expr,

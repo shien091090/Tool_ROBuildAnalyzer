@@ -113,6 +113,49 @@ def test_calc_context_skill_level_missing():
     assert "skill:5015" in ctx.missing_keys
 
 
+def test_calc_context_get_value_present():
+    ctx = context.CalcContext(
+        scalars={},
+        refine_inputs={},
+        grade=0,
+        get_values={34: 100},
+        enabled_skill_levels={},
+        pure_jobs=[],
+        slot_item_id_map={},
+        weapon_level_map={},
+        armor_level_map={},
+        weapon_type_map={},
+        armor_weapon_map={},
+        weapon_atk_map={},
+        weapon_matk_map={},
+        used_skill_levels={}
+    )
+    assert ctx.get_value(34) == 100
+    assert len(ctx.missing_keys) == 0
+
+
+def test_calc_context_get_value_missing():
+    ctx = context.CalcContext(
+        scalars={},
+        refine_inputs={},
+        grade=0,
+        get_values={},
+        enabled_skill_levels={},
+        pure_jobs=[],
+        slot_item_id_map={},
+        weapon_level_map={},
+        armor_level_map={},
+        weapon_type_map={},
+        armor_weapon_map={},
+        weapon_atk_map={},
+        weapon_matk_map={},
+        used_skill_levels={}
+    )
+    result = ctx.get_value(200)
+    assert result is None
+    assert "get:200" in ctx.missing_keys
+
+
 def test_calc_context_grade_value_int():
     ctx = context.CalcContext(
         scalars={},

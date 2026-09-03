@@ -27,6 +27,26 @@ from app.core.entries import EffectEntry, KIND_NUMERIC, KIND_UNRESOLVED
 from app.core.maps import EffectMaps
 from app.core.parser import parse_effect_block
 
+# GET_VALUE_FIELDS: get(N) N 對照角色檔JSON實際能提供的來源子集 — 源自
+# ItemSearchApp.py:2048 stat_fields(完整N->UI欄位名對照見
+# app.core.context.GET_FIELD_NAMES; 這裡只挑角色檔Character dataclass有對應
+# 欄位的那些N, value是Character上的屬性/子dict鍵名)。make_context()依N所在
+# 的三個固定範圍分派讀法: 11/12/19 讀Character頂層欄位(base_lv/job_lv/job);
+# 32-37讀stats(STR/AGI/VIT/INT/DEX/LUK); 255-260讀traits(POW/STA/WIS/SPL/
+# CON/CRT) — 範圍彼此不重疊, 故可共用同一個N->名稱字典。
+#
+# 刻意不列200(MHP)/202(MSP)/263(石碑開啟格數)/264(石碑精煉) — 角色檔沒有這幾個
+# 欄位, 硬性規則: 不可捏造假值, 留空讓 CalcContext.get_value() 在真的被
+# get(200)等讀到時回報 missing_keys("get:200"), 而不是靜默算成0。
+GET_VALUE_FIELDS: dict[int, str] = {
+    11: "base_lv", 12: "job_lv", 19: "job",
+    32: "STR", 33: "AGI", 34: "VIT", 35: "INT", 36: "DEX", 37: "LUK",
+    255: "POW", 256: "STA", 257: "WIS", 258: "SPL", 259: "CON", 260: "CRT",
+}
+_GET_VALUE_TOPLEVEL_KEYS = frozenset({11, 12, 19})
+_GET_VALUE_STAT_KEYS = frozenset({32, 33, 34, 35, 36, 37})
+_GET_VALUE_TRAIT_KEYS = frozenset({255, 256, 257, 258, 259, 260})
+
 
 @dataclass(frozen=True)
 class SourcedEffect:
@@ -74,11 +94,25 @@ def make_context(character: Character, build: Build, reader: DbReader) -> CalcCo
         grade[slot_id] = GRADE_LEVELS.get(cfg.grade, 0)
         slot_item_id_map[slot_id] = cfg.item_id
 
+    # get(N) 角色數值 — 只填GET_VALUE_FIELDS涵蓋、且角色檔實際有提供的N;
+    # stats/traits是可能不完整的dict, 缺的個別欄位(如角色檔沒給AGI)也留空,
+    # 不補0(理由同200/202/263/264: 不可捏造假值, 見GET_VALUE_FIELDS註解)。
+    get_values: dict[int, int] = {}
+    for n, field_name in GET_VALUE_FIELDS.items():
+        if n in _GET_VALUE_TOPLEVEL_KEYS:
+            get_values[n] = getattr(character, field_name)
+        elif n in _GET_VALUE_STAT_KEYS:
+            if field_name in character.stats:
+                get_values[n] = character.stats[field_name]
+        elif n in _GET_VALUE_TRAIT_KEYS:
+            if field_name in character.traits:
+                get_values[n] = character.traits[field_name]
+
     return CalcContext(
         scalars=scalars,
         refine_inputs=refine_inputs,
         grade=grade,
-        get_values={},
+        get_values=get_values,
         enabled_skill_levels=dict(character.skills),
         pure_jobs=[character.job],
         slot_item_id_map=slot_item_id_map,

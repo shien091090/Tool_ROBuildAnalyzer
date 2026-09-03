@@ -212,6 +212,74 @@ def test_evaluate_build_unresolved_condition_routed_and_missing_keys_recorded(ef
     assert "job_STR" in effects.missing_keys
 
 
+def test_make_context_populates_get_values_from_character(reader):
+    # 11/12/19 讀角色頂層欄位, 34讀stats.VIT, 259讀traits.CON —
+    # 對照ItemSearchApp.py:2048 stat_fields(見aggregate.GET_VALUE_FIELDS)。
+    build = _build()
+    character = Character(
+        name="get值角色", job=4055, base_lv=260, job_lv=99,
+        stats={"VIT": 100}, traits={"CON": 80}, skills={},
+    )
+
+    ctx = make_context(character, build, reader)
+
+    assert ctx.get_values[11] == 260   # BaseLv
+    assert ctx.get_values[12] == 99    # JobLv
+    assert ctx.get_values[19] == 4055  # JOB
+    assert ctx.get_values[34] == 100   # VIT
+    assert ctx.get_values[259] == 80   # CON
+    # 200(MHP)/202(MSP)/263/264(石碑) 角色檔無此類欄位, 不可捏造 — 缺席不補0.
+    assert 200 not in ctx.get_values
+    assert 202 not in ctx.get_values
+    assert 263 not in ctx.get_values
+    assert 264 not in ctx.get_values
+    # 角色檔stats/traits本身沒給的個別欄位(如AGI/STR以外的stat)也留空缺席,
+    # 不補0 — 此fixture character的stats只給了VIT.
+    assert 32 not in ctx.get_values  # STR
+    assert 33 not in ctx.get_values  # AGI
+
+
+def test_evaluate_build_get_value_end_to_end_yields_dex_from_vit(tmp_path):
+    """get(N) 接上角色檔的端到端驗證: 真實item_id=4392「監視者卡片」的邏輯
+    AddExtParam(0, 107, get(34)/18) — VIT=100時 100//18=5 (Lua整數除法),
+    107對照EFFECT_MAP為DEX, 故應得 DEX +5.0(修復前get(34)預設0, 只會算出0)。
+    """
+    db_path = str(tmp_path / "get_value_e2e.db")
+    conn = sqlite3.connect(db_path)
+    db.create(conn)
+    db.insert_items(
+        conn,
+        [
+            {
+                "item_id": 9001,
+                "internal_name": "Test_GetValue_Card",
+                "display_name": "測試get值卡片",
+                "description": "d",
+                "slot_count": 0,
+                "class_num": 0,
+                "equip_type": "armor",
+                "stat_vector": None,
+                "onstart_equip_src": "AddExtParam(0, 107, get(34)/18)",
+                "combi_ids": None,
+            },
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    build = Build(name="get值端到端測試配裝", slots={"armor": SlotConfig(item_id=9001)})
+    character = Character(
+        name="get值角色", job=4055, base_lv=1, job_lv=1,
+        stats={"VIT": 100}, traits={}, skills={},
+    )
+
+    with DbReader(db_path) as reader:
+        effects = evaluate_build(build, character, reader, EffectMaps(skill_map={}))
+
+    assert effects.totals[("DEX", "")] == 5.0
+    assert effects.missing_keys == set()
+
+
 def test_evaluate_build_enableskill_cross_item_feeds_later_condition(effects):
     # armor's EnableSkill(63,5) runs before weapon's GetSkillLevel(63)
     # condition (SLOT_IDS order: armor before weapon) -> weapon's block
