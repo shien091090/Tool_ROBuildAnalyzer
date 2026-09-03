@@ -123,17 +123,20 @@ class EffectMaps:
 
 
 def load_skill_map(db_path: str) -> dict[int, str]:
-    """Load skill map from database (skill_id -> skill_name)."""
+    """Load skill map from database (skill_id -> skill_name).
+
+    Raises sqlite3.OperationalError if the skills table does not exist or other DB errors occur.
+    Uses context manager to ensure connection always closes.
+    """
     skill_map = {}
-    try:
-        conn = sqlite3.connect(db_path)
+    with sqlite3.connect(db_path) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT skill_id, skill_name FROM skills")
-        for skill_id, skill_name in cursor.fetchall():
-            skill_map[skill_id] = skill_name
-        conn.close()
-    except Exception:
-        pass
+        try:
+            cursor.execute("SELECT skill_id, skill_name FROM skills")
+            for skill_id, skill_name in cursor.fetchall():
+                skill_map[skill_id] = skill_name
+        finally:
+            cursor.close()
     return skill_map
 
 

@@ -1,6 +1,8 @@
 import sqlite3
 import tempfile
 import os
+import pytest
+import gc
 from app.core import maps
 
 
@@ -31,12 +33,28 @@ def test_load_skill_map():
         cursor.execute("INSERT INTO skills VALUES (5015, '劍術訓練')")
         cursor.execute("INSERT INTO skills VALUES (1234, '火球')")
         conn.commit()
+        cursor.close()
         conn.close()
+        gc.collect()  # Force garbage collection to release file locks on Windows
 
         skill_map = maps.load_skill_map(db_path)
         assert skill_map[5015] == "劍術訓練"
         assert skill_map[1234] == "火球"
         assert len(skill_map) == 2
+        gc.collect()  # Release file locks before tempdir cleanup
+
+
+def test_load_skill_map_missing_table():
+    # Verify that OperationalError is raised when skills table does not exist
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "test.db")
+        conn = sqlite3.connect(db_path)
+        conn.close()
+        gc.collect()  # Force garbage collection to release file locks on Windows
+
+        with pytest.raises(sqlite3.OperationalError):
+            maps.load_skill_map(db_path)
+        gc.collect()  # Release file locks before tempdir cleanup
 
 
 def test_make_maps():
@@ -47,8 +65,11 @@ def test_make_maps():
         cursor.execute("CREATE TABLE skills (skill_id INTEGER PRIMARY KEY, skill_name TEXT)")
         cursor.execute("INSERT INTO skills VALUES (5015, '劍術訓練')")
         conn.commit()
+        cursor.close()
         conn.close()
+        gc.collect()  # Force garbage collection to release file locks on Windows
 
         effect_maps = maps.make_maps(db_path)
         assert isinstance(effect_maps.skill_map, dict)
         assert effect_maps.skill_map[5015] == "劍術訓練"
+        gc.collect()  # Release file locks before tempdir cleanup
