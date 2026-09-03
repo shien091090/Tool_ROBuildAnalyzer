@@ -37,6 +37,28 @@ py -3.12-64 -m importer.cli
 
 執行完成後, 中間資料庫預設輸出至 `data/ro_items.db`(可由`config.json`的`db_path`欄位調整), 並在終端印出各項資料健康指標(道具數、附魔規則數、重複計數、靜默丟棄計數等)。
 
+## M2: 效果結算與比較 CLI
+
+效果解析與比較是M2功能(讀取M1匯入的中間資料庫, 對單一配裝結算效果或比較兩套配裝), GUI是M4——本節只涵蓋M2的命令列驗證面, 尚無視覺化介面。
+
+需先完成上方「執行方式」的M1匯入步驟, 產出 `data/ro_items.db`。同樣須在repo根目錄以模組方式執行:
+
+```
+py -3.12-64 -m app.cli effects <build.json> <character.json>
+py -3.12-64 -m app.cli compare <a.json> <b.json> <character.json>
+```
+
+`effects` 印單一配裝的分類效果加總、其他效果(敘述性技能解鎖/狀態觸發/無法辨識)、未計入的條件效果、warnings；`compare` 印兩套配裝的對齊比較表(依 physical→magical→other 分類排序)。
+
+範例配裝檔在 `userdata/builds/`(如 `sample_a.json`、`sample_b.json`), 範例角色檔在 `userdata/characters/`(如 `sample.json`)。例如:
+
+```
+py -3.12-64 -m app.cli effects userdata/builds/sample_a.json userdata/characters/sample.json
+py -3.12-64 -m app.cli compare userdata/builds/sample_a.json userdata/builds/sample_b.json userdata/characters/sample.json
+```
+
+Windows終端機輸出中文若出現亂碼, 可加上 `PYTHONIOENCODING=utf-8` 環境變數。
+
 ## 測試
 
 ```
