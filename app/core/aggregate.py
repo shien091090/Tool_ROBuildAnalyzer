@@ -155,8 +155,7 @@ def evaluate_build(build: Build, character: Character, reader: DbReader, maps: E
     # 收集全build已裝備item_id(含卡片), 對每件裝備(依上面同一個固定順序當anchor)
     # 查combi_ids -> combo members是否⊆已裝集合 -> 成立則parse, 每個combo_id最多套用一次.
     equipped_ids = set(equipped_items.keys())
-    applied_combo_ids: set[int] = set()
-    attempted_combo_ids: set[int] = set()  # 已查詢過(不論成立/查無), 避免重複warning/重複判定
+    attempted_combo_ids: set[int] = set()  # 已查詢過(不論成立/查無), 避免重複warning/重複判定/重複套用
 
     for item_id in anchor_order:
         slot_key, slot_id, _display, combi_ids = equipped_items[item_id]
@@ -176,7 +175,6 @@ def evaluate_build(build: Build, character: Character, reader: DbReader, maps: E
             if not members or not set(members).issubset(equipped_ids):
                 continue
 
-            applied_combo_ids.add(combo_id)
             member_names = [equipped_items[m][2] for m in members]
             source = "套裝:" + "+".join(member_names)
             _parse_and_collect(onstart_src, ctx, slot_id, maps, source, slot_key, sourced)

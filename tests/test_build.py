@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from app.core.build import GRADE_LEVELS, SLOT_IDS, load_build, load_character
 
 
@@ -137,6 +139,34 @@ def test_load_character_roundtrip_spec_sample(tmp_path):
     # JSON object keys are always strings; skills must come back int-keyed.
     assert character.skills == {5015: 10}
     assert all(isinstance(k, int) for k in character.skills)
+
+
+def test_load_build_unknown_slot_key_raises(tmp_path):
+    data = {
+        "name": "壞配裝",
+        "slots": {
+            "weaposn": {"item_id": 1001},  # typo'd slot key
+        },
+    }
+    path = tmp_path / "build.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="weaposn"):
+        load_build(path)
+
+
+def test_load_build_bad_grade_raises(tmp_path):
+    data = {
+        "name": "壞配裝",
+        "slots": {
+            "armor": {"item_id": 2001, "grade": "S"},  # not a valid GRADE_LEVELS key
+        },
+    }
+    path = tmp_path / "build.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="S"):
+        load_build(path)
 
 
 def test_load_character_empty_skills_defaults(tmp_path):

@@ -88,10 +88,15 @@ def load_build(path) -> Build:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     slots: dict[str, SlotConfig] = {}
     for slot_key, slot_data in data.get("slots", {}).items():
+        if slot_key not in SLOT_IDS:
+            raise ValueError(f"配裝檔含未知部位鍵 '{slot_key}', 合法鍵: {sorted(SLOT_IDS)}")
+        grade = slot_data.get("grade", "none")
+        if grade not in GRADE_LEVELS:
+            raise ValueError(f"配裝檔部位 '{slot_key}' 的階級 '{grade}' 不合法, 合法值: none/D/C/B/A")
         slots[slot_key] = SlotConfig(
             item_id=slot_data["item_id"],
             refine=slot_data.get("refine", 0),
-            grade=slot_data.get("grade", "none"),
+            grade=grade,
             cards=list(slot_data.get("cards", [])),
             enchants=list(slot_data.get("enchants", [])),
         )
