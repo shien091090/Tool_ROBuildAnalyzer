@@ -18,6 +18,7 @@ implement the contract: biggest value wins.
 
 from dataclasses import dataclass
 
+from app.core.aggregate import BuildEffects
 from app.core.entries import classify_category
 
 
@@ -31,7 +32,7 @@ class CompareRow:
     advantage: str  # "a"|"b"|"tie"|"" (不可比 reserved but unreachable)
 
 
-def compare_builds(a, b) -> list[CompareRow]:
+def compare_builds(a: BuildEffects, b: BuildEffects) -> list[CompareRow]:
     """Align totals from two BuildEffects and derive advantage for each row.
 
     Args:
