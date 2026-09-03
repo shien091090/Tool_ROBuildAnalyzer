@@ -1,6 +1,14 @@
 import json
+import os
 import pytest
 from importer import config
+
+
+def test_luadec_and_unluac_paths_are_absolute():
+    assert os.path.isabs(config.LUADEC_EXE)
+    assert os.path.isabs(config.UNLUAC_JAR)
+    assert config.LUADEC_EXE.endswith(os.path.join("data", "tools", "luadec.exe"))
+    assert config.UNLUAC_JAR.endswith(os.path.join("data", "tools", "unluac.jar"))
 
 
 def test_load_reads_fields(tmp_path):

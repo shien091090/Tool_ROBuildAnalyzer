@@ -2,8 +2,9 @@ import json
 import os
 from dataclasses import dataclass
 
-LUADEC_EXE = "data/tools/luadec.exe"
-UNLUAC_JAR = "data/tools/unluac.jar"
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LUADEC_EXE = os.path.join(_REPO_ROOT, "data", "tools", "luadec.exe")
+UNLUAC_JAR = os.path.join(_REPO_ROOT, "data", "tools", "unluac.jar")
 
 
 class ConfigNotFoundError(Exception):

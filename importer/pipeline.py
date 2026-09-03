@@ -15,8 +15,11 @@ def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
     combos = equipment_properties.parse_combiitem(lua_texts["equipment_properties"])
     enchant_rows = enchant.parse(lua_texts["enchant"])
 
+    info_by_id = {r["item_id"]: r for r in info_rows}
+    iteminfo_duplicate_id_count = len(info_rows) - len(info_by_id)
+
     items = []
-    for info in info_rows:
+    for info in info_by_id.values():
         iid = info["item_id"]
         eq = equip_rows.get(iid, {})
         items.append({
@@ -59,4 +62,5 @@ def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
         "enchant_rules_count": len(enchant_rows),
         "enchant_tables_count": len({r["table_index"] for r in enchant_rows}),
         "enchant_weight_anomaly_count": anomaly_count,
+        "iteminfo_duplicate_id_count": iteminfo_duplicate_id_count,
     }

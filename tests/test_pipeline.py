@@ -116,6 +116,44 @@ def test_report_counts(tmp_path):
     assert report["enchant_weight_anomaly_count"] == 1
 
 
+_ITEMINFO_DUPLICATE = """
+tbl = {
+  [450263] = {
+    identifiedDisplayName = "舊名稱",
+    identifiedDescriptionName = { "第一行" },
+    slotCount = 0,
+    ClassNum = 0,
+  },
+  [450263] = {
+    identifiedDisplayName = "新名稱",
+    identifiedDescriptionName = { "第一行" },
+    slotCount = 0,
+    ClassNum = 0,
+  },
+}
+"""
+
+
+def test_duplicate_item_id_last_write_wins_and_counted(tmp_path):
+    db_path = str(tmp_path / "dup.db")
+    report = pipeline.run(
+        {
+            "iteminfo": _ITEMINFO_DUPLICATE,
+            "itemdbname": _ITEMDBNAME,
+            "equipment_properties": _EQUIP_PROPS,
+            "enchant": _ENCHANT,
+        },
+        db_path,
+        "123:456",
+    )
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT display_name FROM items WHERE item_id=450263").fetchone()
+    assert row[0] == "新名稱"
+    assert report["items_count"] == 1
+    assert report["iteminfo_duplicate_id_count"] == 1
+
+
 def test_fingerprint_and_date_written(tmp_path):
     report, conn = _run(tmp_path)
     fp = conn.execute(
