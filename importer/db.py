@@ -6,6 +6,7 @@ DROP TABLE IF EXISTS items;
 DROP TABLE IF EXISTS combos;
 DROP TABLE IF EXISTS enchant_tables;
 DROP TABLE IF EXISTS import_meta;
+DROP TABLE IF EXISTS skills;
 CREATE TABLE items(
   item_id INTEGER PRIMARY KEY,
   internal_name TEXT,
@@ -36,6 +37,11 @@ CREATE TABLE enchant_tables(
 CREATE TABLE import_meta(
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+CREATE TABLE skills(
+  skill_id INTEGER PRIMARY KEY,
+  internal_name TEXT,
+  skill_name TEXT
 );
 """
 
@@ -73,6 +79,14 @@ def insert_enchants(conn: sqlite3.Connection, rows: list[dict]) -> None:
         " VALUES(:table_index, :target_internal_names, :slot_index,"
         " :require_cost, :success_rate, :option_internal_name, :option_weight)",
         [{**r, "target_internal_names": _j(r["target_internal_names"])} for r in rows],
+    )
+
+
+def insert_skills(conn: sqlite3.Connection, rows: list[dict]) -> None:
+    conn.executemany(
+        "INSERT INTO skills(skill_id, internal_name, skill_name)"
+        " VALUES(:skill_id, :internal_name, :skill_name)",
+        rows,
     )
 
 

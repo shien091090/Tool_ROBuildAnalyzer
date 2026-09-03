@@ -8,10 +8,15 @@ _GRF_LUB_TARGETS = {
         "data\\luafiles514\\lua files\\equipmentproperties\\equipmentproperties.lub",
     "enchant": "data\\luafiles514\\lua files\\enchant\\enchantlist.lub",
     "itemdbname": "data\\luafiles514\\lua files\\itemdbnametbl.lub",
+    "skillid": "data\\luafiles514\\lua files\\skillinfoz\\skillid.lub",
+    "skillinfolist": "data\\luafiles514\\lua files\\skillinfoz\\skillinfolist.lub",
 }
 # 反編譯器選用比照SNShienRODataBase驗證過的組合:
 # equipment_properties用unluac(luadec對這支會產出壞結構), 其餘用luadec
 _UNLUAC_KEYS = {"equipment_properties"}
+# 這幾支反編譯後的中文字面值實際編碼是cp950(Big5), 不是utf-8;
+# 比照SNShienRODataBase pipeline.py的_read()用法, 用utf-8解碼會產生亂碼(U+FFFD)
+_CP950_KEYS = {"skillid", "skillinfolist"}
 
 
 def main() -> None:
@@ -52,7 +57,8 @@ def main() -> None:
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode(errors="replace") if e.stderr else ""
             raise SystemExit(f"反編譯 {key} 失敗 ({lub_path}): {stderr}")
-        with open(out_path, encoding="utf-8", errors="replace") as f:
+        text_encoding = "cp950" if key in _CP950_KEYS else "utf-8"
+        with open(out_path, encoding=text_encoding, errors="replace") as f:
             lua_texts[key] = f.read()
 
     print("解析並寫入資料庫…")
