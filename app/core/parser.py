@@ -432,10 +432,21 @@ def _map_int_arg_with_id(
     ctx: CalcContext,
     slot_id: int | None,
 ) -> tuple[int | None, str]:
-    """Like ``lua_expr.map_int_arg`` (ro_core.py:799-809), but also returns the
-    resolved int id (or None on total failure) alongside the mapped name — the
-    #45-68 batch's (c)-type handlers need both: the name for the key string,
-    the id for extra={"target_id": ...} metadata (task-7 移植轉換規則).
+    """Map args[index] (evaluated to int) through mapping, with text fallbacks
+    (ported from ro_core.py's map_int_arg, ro_core.py:799-809), but also
+    returns the resolved int id alongside the mapped name — the #45-68
+    batch's (c)-type handlers need both: the name for the key string, the id
+    for extra={"target_id": ...} metadata (task-7 移植轉換規則). This is the
+    single implementation (no separate lua_expr.map_int_arg — that name-only
+    variant was deleted as dead code once every call site here switched to
+    this one, which is a strict superset).
+
+    NOTE: the returned id can be None when the id argument itself is
+    unresolvable (out of range, or fails both the safe_eval and raw-int
+    fallback paths) — every caller passes this straight into
+    extra={"target_id": id}, so downstream consumers of EffectEntry.extra
+    must tolerate target_id being None, not just the mapped name falling
+    back to a fallback_prefix+text string.
     """
     if args is None or index >= len(args):
         return None, f"{fallback_prefix}?"
@@ -489,9 +500,11 @@ def _match_effect_handlers(
     #45-68 (補完解析段, ro_core.py:1884-2350, Task 9): same "None →
     UNRECOGNIZED" rule applies throughout. This section additionally ports
     ro_core.py's own `split_lua_args`/`eval_lua_arg`/`map_int_arg` helpers
-    (now on `lua_expr`, plus this module's `_map_int_arg_with_id` which also
-    surfaces the resolved id for extra={"target_id": ...}) for the handlers
-    whose original regex captured the whole raw args_text into one group
+    (`split_lua_args`/`eval_lua_arg` on `lua_expr`; `map_int_arg` as this
+    module's `_map_int_arg_with_id`, which also surfaces the resolved id for
+    extra={"target_id": ...} — the only implementation, see its own
+    docstring) for the handlers whose original regex captured the whole raw
+    args_text into one group
     instead of one group per argument — ported in that shape for 逐字移植
     fidelity rather than restructured into #1-44's per-argument-group style.
     See the section banner comment below for the one sign-inversion quirk
@@ -1243,13 +1256,16 @@ def _match_effect_handlers(
     # directly on it), most of this batch mirrors the ORIGINAL's own code
     # shape: a single regex group captures the whole raw args_text, which is
     # then split via lua_expr.split_lua_args and picked apart with
-    # lua_expr.eval_lua_arg / _map_int_arg_with_id (ro_core.py's own
-    # eval_lua_arg/map_int_arg, ported to app/core/lua_expr.py ahead of this
-    # task specifically for this section) — ported this way deliberately for
-    # 逐字移植 fidelity, not simplified into the #1-44 shape, since the
-    # original itself chose this shape for these handlers. A handful (#51/52/
-    # 55/56/58/59/60/66) still used direct per-argument regex groups in the
-    # original and are ported in the #1-44 shape accordingly.
+    # lua_expr.eval_lua_arg (ro_core.py's own eval_lua_arg, ported to
+    # app/core/lua_expr.py ahead of this task specifically for this section)
+    # and this module's own _map_int_arg_with_id (ro_core.py's map_int_arg —
+    # kept here rather than on lua_expr since every call site needs the
+    # resolved id too, not just the mapped name; see its docstring) — ported
+    # this way deliberately for 逐字移植 fidelity, not simplified into the
+    # #1-44 shape, since the original itself chose this shape for these
+    # handlers. A handful (#51/52/55/56/58/59/60/66) still used direct
+    # per-argument regex groups in the original and are ported in the #1-44
+    # shape accordingly.
     #
     # eval_lua_arg(args, index, default, ...) returns `default` only when
     # `index` is out of range (argument not supplied) — it returns None when
@@ -1257,9 +1273,9 @@ def _match_effect_handlers(
     # cases funnel through this same call, so a `val is None` check after
     # calling it with a non-None default (0) is still exactly the task-7
     # binding "None → UNRECOGNIZED" guard; it is only skipped for id/name
-    # lookups (_map_int_arg_with_id), which — like the original's
-    # map_int_arg — never fail: they degrade to a fallback_prefix+text/id
-    # string instead, matching ro_core.py:799-809.
+    # lookups (_map_int_arg_with_id), which — like the original's map_int_arg
+    # — never fail: they degrade to a fallback_prefix+text/id string instead,
+    # matching ro_core.py:799-809.
     # =====================================================
 
     # 45. AddHealValue / SubHealValue(value) — 治癒量 ±N%
@@ -1294,10 +1310,16 @@ def _match_effect_handlers(
 
     # 47a/b. (Add|Sub)(HP|SP)drain(rate[, amount]) — single-arg: {pool}吸收
     # ±N% (one entry); two-arg: {pool}吸收機率 ±N% + {pool}吸收量 ±N% (TWO
-    # entries). Branch on len(args) rather than "amount is None" (which the
-    # original conflates for both "no 2nd arg" and "2nd arg failed to eval")
-    # so a present-but-unresolvable amount correctly becomes its own
-    # UNRECOGNIZED entry instead of silently degrading to single-arg mode.
+    # entries). Branch on len(args) rather than "amount is None". In the
+    # ORIGINAL, eval_lua_arg's None only ever meant "no 2nd arg" — a
+    # present-but-unresolvable arg came back as an error-suffixed STRING, not
+    # None, so `amount is None` was unambiguous there. The ambiguity is a
+    # side effect of THIS port's Task-5 deliberate change (lua_expr.safe_eval
+    # returns None on any resolution failure, not just "missing"), which
+    # makes eval_lua_arg's out-of-range `default=None` collide with a
+    # present-but-failed 2nd arg. len(args) sidesteps that collision so a
+    # present-but-unresolvable amount correctly becomes its own UNRECOGNIZED
+    # entry instead of silently degrading to single-arg mode.
     m = re.match(r"(Add|Sub)(HP|SP)drain\s*\((.*)\)\s*$", line)
     if m:
         op, pool, args_text = m.groups()

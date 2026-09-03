@@ -118,9 +118,10 @@ def test_drain_rate_unresolvable_becomes_unrecognized():
 
 
 def test_drain_amount_present_but_unresolvable_becomes_unrecognized():
-    # Deliberate improvement over the original's ambiguous eval_lua_arg
-    # default (which conflates "no 2nd arg" with "2nd arg failed to eval");
-    # this port distinguishes them via len(args) — see handler comment.
+    # The ambiguity here is this port's own (Task-5 safe_eval-returns-None
+    # change), not the original's — see the handler comment for why; this
+    # port distinguishes "no 2nd arg" from "2nd arg failed to eval" via
+    # len(args) instead of relying on eval_lua_arg's None default.
     r = parser.parse_effect_block("AddHPdrain(50,total_STR)", _ctx(), None, _maps())
     assert len(r.entries) == 1
     assert r.entries[0].kind == entries.KIND_UNRECOGNIZED

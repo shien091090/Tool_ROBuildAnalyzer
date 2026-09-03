@@ -202,7 +202,7 @@ def test_eval_condition_none_missing_set_not_empty_blocks_short_circuit():
 
 
 # ---------------------------------------------------------------------------
-# split_lua_args / get_lua_call_args / eval_lua_arg / map_int_arg
+# split_lua_args / get_lua_call_args / eval_lua_arg
 # ---------------------------------------------------------------------------
 
 
@@ -228,20 +228,3 @@ def test_eval_lua_arg_uses_default_when_missing_index():
 
 def test_eval_lua_arg_evaluates_present_index():
     assert lua_expr.eval_lua_arg(["3+4"], 0, None, {}, _ctx(), None) == 7
-
-
-def test_map_int_arg_maps_known_key():
-    args = ["2"]
-    result = lua_expr.map_int_arg(args, 0, {2: "單手劍"}, "武器?", {}, _ctx(), None)
-    assert result == "單手劍"
-
-
-def test_map_int_arg_unknown_key_uses_fallback_prefix():
-    args = ["99"]
-    result = lua_expr.map_int_arg(args, 0, {2: "單手劍"}, "武器?", {}, _ctx(), None)
-    assert result == "武器?99"
-
-
-def test_map_int_arg_missing_index_uses_fallback_question_mark():
-    result = lua_expr.map_int_arg([], 0, {2: "單手劍"}, "武器", {}, _ctx(), None)
-    assert result == "武器?"

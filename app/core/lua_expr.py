@@ -293,29 +293,3 @@ def eval_lua_arg(args, index: int, default, variables: dict, ctx: CalcContext, c
     if args is None or index >= len(args):
         return default
     return safe_eval(args[index], variables, ctx, current_slot)
-
-
-def map_int_arg(
-    args,
-    index: int,
-    mapping: dict,
-    fallback_prefix: str,
-    variables: dict,
-    ctx: CalcContext,
-    current_slot: int | None,
-) -> str:
-    """Map args[index] (evaluated to int) through mapping, with text fallbacks.
-
-    Ported from ro_core.py:799-809, adapted to safe_eval returning None
-    (instead of an error string) on unresolvable expressions.
-    """
-    if args is None or index >= len(args):
-        return f"{fallback_prefix}?"
-    try:
-        key = int(safe_eval(args[index], variables, ctx, current_slot))
-    except Exception:
-        try:
-            key = int(args[index])
-        except Exception:
-            return f"{fallback_prefix}{args[index]}"
-    return mapping.get(key, f"{fallback_prefix}{key}")
