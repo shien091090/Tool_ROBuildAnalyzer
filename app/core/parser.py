@@ -6,12 +6,13 @@ section-by-section line-number map this port is based on, and
 .superpowers/sdd/2026-09-03-m2-effects/task-6-brief.md for the binding
 interfaces and rulings this module implements.
 
-This module is the M2 "skeleton": line preprocessing, the P.S/Type+Stat/Stat
-non-gated lines, the if/elseif/else/end state machine (extended with the new
-unresolved-condition mechanism), the V1-V8 variable-assignment handlers, the
-handler hook (stubbed — Task 7-9 fill it in), and the fallback. The ~90 real
-effect handlers (EnableSkill, AddDamage_*, ...) are NOT part of this task;
-``_match_effect_handlers`` always returns False here.
+This module started as the M2 "skeleton" (Task 6): line preprocessing, the
+P.S/Type+Stat/Stat non-gated lines, the if/elseif/else/end state machine
+(extended with the new unresolved-condition mechanism), the V1-V8
+variable-assignment handlers, the handler hook, and the fallback.
+``_match_effect_handlers`` now implements the 通用段 handlers #1-13
+(EnableSkill..ReceiveItem_Equip, Task 7); Tasks 8-9 append the 魔法段/物理段/
+補完解析段 branches to the same chain.
 
 Deliberate deviations from the original (see task-6 brief for the ruling
 text backing each):
@@ -392,8 +393,31 @@ def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_
 
 
 # =========================================================
-# Handler hook (Task 7-9 fill this in)
+# Handler hook (Task 7: 通用段 #1-13. Task 8-9 append more branches to this
+# same first-match-wins chain, in ro_core.py:1144-2350 order.)
 # =========================================================
+
+
+def _unrecognized(line: str) -> EffectEntry:
+    """Shared UNRECOGNIZED entry for a parameter eval that returned None.
+
+    Binding rule (task-7 brief, 移植轉換規則): whenever a handler's value
+    expression can't be resolved (missing context / parse failure), the line
+    becomes this structured entry instead of the original's ad-hoc
+    "（無法解析）" string suffix — never an exception.
+    """
+    return EffectEntry(
+        key="無法辨識", value=None, unit="", kind=KIND_UNRECOGNIZED, category=CAT_OTHER,
+        extra={"raw_line": line},
+    )
+
+
+def _skill_name(maps: EffectMaps, skill_id: int) -> str:
+    return maps.skill_map.get(skill_id, f"技能ID {skill_id}")
+
+
+def _signed(val: float, op: str) -> float:
+    return val if op == "Add" else -val
 
 
 def _match_effect_handlers(
@@ -403,16 +427,259 @@ def _match_effect_handlers(
     slot_id: int | None,
     maps: EffectMaps,
     entries_out: list[EffectEntry],
+    skill_delay_accum: dict[str, int],
+    sfct_state: dict[str, bool],
 ) -> bool:
-    """Placeholder for the ~90-entry effect handler chain (ro_core.py:1144-2350).
+    """通用段 handlers #1-13 (ro_core.py:1144-1410).
 
-    Task 6 skeleton always returns False (no line matches). Tasks 7-9 fill
-    this in with the real handlers. NOTE for a future task: the skill-delay
-    accumulator (#10, AddSkillDelay/SubSkillDelay) needs to feed the
-    ``skill_delay_accum`` dict local to ``parse_effect_block`` — this hook's
-    signature will likely need to gain that parameter (or an equivalent
-    mutable channel) when Task 7 lands.
+    Ported top-to-bottom, first-match-wins (mirrors the original's
+    `if ... and condition_met: ...; continue` chain — this hook is only
+    invoked while the current block is active, so the `condition_met` check
+    from the original is already covered by the caller). Every
+    `dependencies.register_function(...)` call in the source range is dead
+    code (function_defs is never read) and is not ported.
+
+    ``skill_delay_accum`` and ``sfct_state`` are mutable channels owned by
+    ``parse_effect_block`` (created once per whole block_text, matching the
+    original's function-scope `sfct_handled = False` / `skill_delay_accum =
+    {}` at ro_core.py:572-573 — NOT reset per if/elseif branch).
     """
+    # 1. EnableSkill(skill_id, level)
+    m = re.match(r"EnableSkill\((\d+),\s*(\d+)\)", line)
+    if m:
+        skill_id, level = int(m.group(1)), int(m.group(2))
+        skill_name = _skill_name(maps, skill_id)
+        key = f"可使用【{skill_name}】Lv.{level}"
+        entries_out.append(
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER)
+        )
+        ctx.enabled_skill_levels[skill_id] = level
+        return True
+
+    # 2. UseSkill(skill_id)
+    m = re.match(r"UseSkill\(\s*(\d+)\s*\)", line)
+    if m:
+        skill_id = int(m.group(1))
+        skill_name = _skill_name(maps, skill_id)
+        key = f"使用【{skill_name}】"
+        entries_out.append(
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER)
+        )
+        ctx.used_skill_levels[skill_id] = True
+        return True
+
+    # 3a-c. AddExtParam / SubExtParam(unit, param_id, value_expr)
+    m = re.match(r"(Add|Sub)ExtParam\((\d+),\s*(\d+),\s*(.+)\)", line)
+    if m:
+        op, _unit, param_id, val_expr = m.groups()
+        val = lua_expr.safe_eval(val_expr, variables, ctx, slot_id)
+        effect_str = static_maps.EFFECT_MAP.get(int(param_id), f"參數{param_id}")
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+
+        # 3a: CRI / 完全迴避 — value is per-10 (原碼 val // 10)
+        if effect_str in ("CRI", "完全迴避"):
+            v = float(int(val) // 10)
+            entries_out.append(
+                EffectEntry(key=effect_str, value=_signed(v, op), unit="", kind=KIND_NUMERIC,
+                            category=classify_category(effect_str))
+            )
+            return True
+
+        # 3b: 攻擊後延遲類 — sign INVERTED (Add=減少/-、Sub=增加/+), always %
+        if effect_str in ("攻擊後延遲", "(2轉以下)攻擊後延遲"):
+            signed = -val if op == "Add" else val
+            entries_out.append(
+                EffectEntry(key=effect_str, value=signed, unit="%", kind=KIND_NUMERIC,
+                            category=classify_category(effect_str))
+            )
+            return True
+
+        # 3c: 一般情況 — % 只在 effect_map 名稱本身以 % 結尾時附加
+        percent_suffix = "%" if str(effect_str).endswith("%") else ""
+        entries_out.append(
+            EffectEntry(key=effect_str, value=_signed(val, op), unit=percent_suffix, kind=KIND_NUMERIC,
+                        category=classify_category(effect_str))
+        )
+        return True
+
+    # 4. AddSpellDelay / SubSpellDelay(value_expr) — 技能後延遲 %
+    m = re.match(r"(Add|Sub)SpellDelay\(\s*(.+)\s*\)\s*$", line)
+    if m:
+        op, expr = m.groups()
+        val = lua_expr.safe_eval(expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "技能後延遲"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key))
+        )
+        return True
+
+    # 5. AddSpellCastTime / SubSpellCastTime(value_expr) — 變動詠唱時間 %
+    m = re.match(r"(Add|Sub)SpellCastTime\(\s*(.+)\s*\)", line)
+    if m:
+        op, value_expr = m.groups()
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "變動詠唱時間"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key))
+        )
+        return True
+
+    # 6. AddSFCTEquipAmount / SubSFCTEquipAmount(item_id?, ms_expr, dummy) —
+    # 固定詠唱時間 秒 (ms/1000). sfct_handled once-lock shared with #7: once
+    # true, this and #7 stop matching for the REST of this block_text (the
+    # line then falls through to the general fallback → UNRECOGNIZED),
+    # mirroring the original's `and not sfct_handled` guard.
+    m = re.match(r"(Add|Sub)SFCTEquipAmount\(\s*(?:(\d+)\s*,\s*)?(.+?)\s*,\s*(\d+)\s*\)\s*$", line)
+    if m and not sfct_state["handled"]:
+        op, _item_id, expr, _dummy = m.groups()
+        val_ms = lua_expr.safe_eval(expr, variables, ctx, slot_id)
+        sfct_state["handled"] = True
+        if val_ms is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "固定詠唱時間"
+        entries_out.append(
+            EffectEntry(key=key, value=round(_signed(val_ms, op) / 1000, 2), unit="秒", kind=KIND_NUMERIC,
+                        category=classify_category(key))
+        )
+        return True
+
+    # 7. AddSFCTEquipPermill / SubSFCTEquipPermill(item_id?, permill_expr, dummy) —
+    # 固定詠唱時間 % (permill/10). Same sfct_handled lock as #6.
+    m = re.match(r"(Add|Sub)SFCTEquipPermill\(\s*(?:(\d+)\s*,\s*)?(.+?)\s*,\s*(\d+)\s*\)\s*$", line)
+    if m and not sfct_state["handled"]:
+        op, _item_id, expr, _dummy = m.groups()
+        val = lua_expr.safe_eval(expr, variables, ctx, slot_id)
+        sfct_state["handled"] = True
+        if val is None:
+            # Deliberate fix vs literal transliteration: the original does
+            # `val = val // 10` BEFORE checking whether `val` parsed, which
+            # would raise TypeError on a None safe_eval_expr result. The
+            # binding "no exceptions" rule takes priority here.
+            entries_out.append(_unrecognized(line))
+            return True
+        v = int(val) // 10
+        key = "固定詠唱時間"
+        entries_out.append(
+            EffectEntry(key=key, value=float(_signed(v, op)), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key))
+        )
+        return True
+
+    # 8. AddDamage_SKID / SubDamage_SKID(1, skill_id, value_expr) — 技能傷害(裝備段) %
+    m = re.match(r"(Add|Sub)Damage_SKID\(\s*1\s*,\s*(\d+)\s*,\s*(.+)\s*\)\s*$", line)
+    if m:
+        op, skill_id, value_expr = m.groups()
+        skill_id = int(skill_id)
+        skill_name = _skill_name(maps, skill_id)
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"技能【{skill_name}】傷害(裝備段)"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+        )
+        return True
+
+    # 9. AddDamage_passive_SKID / SubDamage_passive_SKID(1, skill_id, value_expr) —
+    # 技能傷害(技能段) %
+    m = re.match(r"(Add|Sub)Damage_passive_SKID\(\s*1\s*,\s*(\d+)\s*,\s*(.+)\s*\)\s*$", line)
+    if m:
+        op, skill_id, value_expr = m.groups()
+        skill_id = int(skill_id)
+        skill_name = _skill_name(maps, skill_id)
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"技能【{skill_name}】傷害(技能段)"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+        )
+        return True
+
+    # 10. AddSkillDelay / SubSkillDelay(skill_id, ms_expr) — 累加, 無即時條目;
+    # flush 由 parse_effect_block 結尾統一輸出(技能【X】冷卻時間, 秒).
+    m = re.match(r"(Add|Sub)SkillDelay\(\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, skill_id, delay_expr = m.groups()
+        skill_id = int(skill_id)
+        skill_name = _skill_name(maps, skill_id)
+        val_ms = lua_expr.safe_eval(delay_expr, variables, ctx, slot_id)
+        if val_ms is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        delta = val_ms if op == "Add" else -val_ms
+        skill_delay_accum[skill_name] = skill_delay_accum.get(skill_name, 0) + delta
+        return True
+
+    # 11. AddSpecificSpellCastTime / SubSpecificSpellCastTime(skill_id, value_expr) —
+    # 技能【X】變動詠唱時間 %
+    m = re.match(r"(Add|Sub)SpecificSpellCastTime\(\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, skill_id, value_expr = m.groups()
+        skill_id = int(skill_id)
+        skill_name = _skill_name(maps, skill_id)
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"技能【{skill_name}】變動詠唱時間"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+        )
+        return True
+
+    # 12. AddEXPPercent_KillRace / SubEXPPercent_KillRace(race_id, value_expr) —
+    # 從{race}型怪的經驗值 %
+    m = re.match(r"(Add|Sub)EXPPercent_KillRace\(\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, race_id, value_expr = m.groups()
+        race_id = int(race_id)
+        race_name = static_maps.RACE_MAP.get(race_id, f"種族{race_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            # Deliberate fix vs literal transliteration: the original never
+            # checked isinstance(val, int) here and would emit a "None%"
+            # string on parse failure. Binding "no exceptions / None→
+            # UNRECOGNIZED" rule takes priority.
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"從 {race_name} 型怪的經驗值"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 13. AddReceiveItem_Equip / SubReceiveItem_Equip(value_expr) — 掉寶率 %
+    m = re.match(r"(Add|Sub)ReceiveItem_Equip\(\s*(.+?)\s*\)", line)
+    if m:
+        op, value_expr = m.groups()
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "掉寶率"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_OTHER)
+        )
+        return True
+
     return False
 
 
@@ -429,6 +696,7 @@ def parse_effect_block(
     variables: dict = {}
     block_stack: list[dict] = []
     skill_delay_accum: dict[str, int] = {}
+    sfct_state: dict[str, bool] = {"handled": False}
 
     for raw in block_text.splitlines():
         original_line = raw.strip()
@@ -538,7 +806,9 @@ def parse_effect_block(
         if active:
             if _try_variable_assignment(line, variables, ctx, slot_id, trace):
                 continue
-            if _match_effect_handlers(line, variables, ctx, slot_id, maps, entries_out):
+            if _match_effect_handlers(
+                line, variables, ctx, slot_id, maps, entries_out, skill_delay_accum, sfct_state
+            ):
                 continue
 
         # ---- fallback (ro_core.py:2356-2367) ----
@@ -554,9 +824,11 @@ def parse_effect_block(
                         extra={"raw_line": original_line})
         )
 
-    # ---- skill_delay_accum flush (ro_core.py:2370-2375). The dict is always
-    # empty in this task's skeleton — Task 7's #10 handler (AddSkillDelay/
-    # SubSkillDelay) is what feeds it. ----
+    # ---- skill_delay_accum flush (ro_core.py:2370-2375). Fed by handler #10
+    # (AddSkillDelay/SubSkillDelay, Task 7) — accumulates per skill_name
+    # across every matching line in this whole block_text (function-scope,
+    # not per if/elseif branch), then emits one merged 秒 entry per skill
+    # here at the end. ----
     for skill_name, total_ms in skill_delay_accum.items():
         value = round(total_ms / 1000, 2)
         key = f"技能【{skill_name}】冷卻時間"
