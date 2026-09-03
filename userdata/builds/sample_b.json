@@ -1,0 +1,12 @@
+{
+  "name": "sample_b",
+  "slots": {
+    "armor": {
+      "item_id": 450263,
+      "refine": 10,
+      "grade": "A",
+      "cards": [4001],
+      "enchants": ["Vitality5"]
+    }
+  }
+}

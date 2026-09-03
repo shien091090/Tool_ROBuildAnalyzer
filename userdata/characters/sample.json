@@ -1,0 +1,23 @@
+{
+  "name": "sample",
+  "job": 4055,
+  "base_lv": 260,
+  "job_lv": 55,
+  "stats": {
+    "STR": 130,
+    "AGI": 90,
+    "VIT": 100,
+    "INT": 1,
+    "DEX": 90,
+    "LUK": 30
+  },
+  "traits": {
+    "POW": 100,
+    "STA": 60,
+    "WIS": 0,
+    "SPL": 0,
+    "CON": 80,
+    "CRT": 20
+  },
+  "skills": {}
+}
