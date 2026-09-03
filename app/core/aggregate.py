@@ -43,6 +43,12 @@ class BuildEffects:
     others: list[SourcedEffect]  # DESCRIPTIVE/PROC/UNRECOGNIZED
     warnings: list[str]  # 查無item/卡片/詞條/套裝等(不默默丟)
     missing_keys: set[str] = field(default_factory=set)  # ctx.missing_keys快照
+    # (key,unit) -> category, recorded from the FIRST KIND_NUMERIC entry summed
+    # into totals for that key (later entries with the same key keep the first
+    # category). category已由parser.py算好放在EffectEntry上; 這裡只是保留它,
+    # 不重新推導 — compare.py/cli.py消費這份dict, 不得再對顯示字串重跑分類邏輯
+    # (spec §5 字串重解析debt; 分類函式唯一production呼叫點在parser.py).
+    categories: dict[tuple[str, str], str] = field(default_factory=dict)
 
 
 def make_context(character: Character, build: Build, reader: DbReader) -> CalcContext:
@@ -181,6 +187,7 @@ def evaluate_build(build: Build, character: Character, reader: DbReader, maps: E
 
     # ---- 分流: totals(僅NUMERIC加總) / unresolved / others ----
     totals: dict[tuple[str, str], float] = {}
+    categories: dict[tuple[str, str], str] = {}
     unresolved: list[SourcedEffect] = []
     others: list[SourcedEffect] = []
     for se in sourced:
@@ -188,6 +195,8 @@ def evaluate_build(build: Build, character: Character, reader: DbReader, maps: E
         if entry.kind == KIND_NUMERIC:
             key = (entry.key, entry.unit)
             totals[key] = totals.get(key, 0.0) + entry.value
+            if key not in categories:
+                categories[key] = entry.category
         elif entry.kind == KIND_UNRESOLVED:
             unresolved.append(se)
         else:
@@ -200,4 +209,5 @@ def evaluate_build(build: Build, character: Character, reader: DbReader, maps: E
         others=others,
         warnings=warnings,
         missing_keys=set(ctx.missing_keys),
+        categories=categories,
     )

@@ -8,17 +8,26 @@ from app.core.entries import (
     CAT_PHYSICAL,
     KIND_NUMERIC,
     EffectEntry,
+    classify_category,
 )
 
 
 def _make_build_effects(totals_dict: dict[tuple[str, str], float]) -> BuildEffects:
-    """Helper to create a BuildEffects with only totals populated."""
+    """Helper to create a BuildEffects with only totals(+matching categories)
+    populated. categories is derived here via classify_category purely as
+    test-fixture convenience (compare.py itself must NOT do this — see
+    test_e2e_effects.test_no_display_string_reparsing) so it mirrors what
+    aggregate.evaluate_build would have recorded from each entry's own
+    already-classified category.
+    """
+    categories = {key: classify_category(key[0]) for key in totals_dict}
     return BuildEffects(
         sourced=[],
         totals=totals_dict,
         unresolved=[],
         others=[],
         warnings=[],
+        categories=categories,
     )
 
 
@@ -216,6 +225,41 @@ def test_compare_builds_single_empty():
     assert rows[0].a is None
     assert rows[0].b == 1000.0
     assert rows[0].advantage == "b"
+
+
+def test_compare_builds_category_read_from_categories_not_reclassified():
+    """C2: compare_builds must READ category from BuildEffects.categories,
+    never recompute it via classify_category on the key string. Proven by
+    deliberately storing a category that classify_category("ATK") would NOT
+    itself produce (physical) — if compare_builds still returns "physical"
+    here it would mean it silently ignored our categories dict and
+    reclassified the key itself, which is exactly the string-reparsing debt
+    C2 forbids.
+    """
+    a = BuildEffects(
+        sourced=[], totals={("ATK", ""): 100.0}, unresolved=[], others=[], warnings=[],
+        categories={("ATK", ""): CAT_OTHER},
+    )
+    b = BuildEffects(sourced=[], totals={}, unresolved=[], others=[], warnings=[], categories={})
+    rows = compare_builds(a, b)
+
+    assert len(rows) == 1
+    assert rows[0].category == CAT_OTHER
+
+
+def test_compare_builds_category_falls_back_to_other_side():
+    """A key present only in b's totals has its category only in b.categories
+    — compare_builds must fall back to b's side rather than erroring/omitting
+    the category."""
+    a = BuildEffects(sourced=[], totals={}, unresolved=[], others=[], warnings=[], categories={})
+    b = BuildEffects(
+        sourced=[], totals={("HP", ""): 500.0}, unresolved=[], others=[], warnings=[],
+        categories={("HP", ""): CAT_OTHER},
+    )
+    rows = compare_builds(a, b)
+
+    assert len(rows) == 1
+    assert rows[0].category == CAT_OTHER
 
 
 def test_compare_row_fields():

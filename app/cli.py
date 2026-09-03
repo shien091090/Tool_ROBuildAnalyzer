@@ -23,7 +23,7 @@ from app.core.aggregate import BuildEffects, evaluate_build
 from app.core.build import load_build, load_character
 from app.core.compare import CompareRow, compare_builds
 from app.core.db_reader import DbReader
-from app.core.entries import CAT_MAGICAL, CAT_OTHER, CAT_PHYSICAL, classify_category
+from app.core.entries import CAT_MAGICAL, CAT_OTHER, CAT_PHYSICAL
 from app.core.maps import make_maps
 from importer.config import ConfigInvalidError, ConfigNotFoundError
 from importer.config import load as load_config
@@ -49,7 +49,9 @@ def _print_totals(effects: BuildEffects) -> None:
     print("[分類效果加總]")
     by_cat: dict[str, list[tuple[str, str, float]]] = {c: [] for c in _CATEGORY_ORDER}
     for (key, unit), value in effects.totals.items():
-        by_cat[classify_category(key)].append((key, unit, value))
+        # category不重新解析key字串, 讀BuildEffects.categories(parser.py算好
+        # 一路帶下來的結構化欄位, spec §5).
+        by_cat[effects.categories[(key, unit)]].append((key, unit, value))
     any_row = False
     for cat in _CATEGORY_ORDER:
         rows = sorted(by_cat[cat])

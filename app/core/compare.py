@@ -19,7 +19,6 @@ implement the contract: biggest value wins.
 from dataclasses import dataclass
 
 from app.core.aggregate import BuildEffects
-from app.core.entries import classify_category
 
 
 @dataclass(frozen=True)
@@ -49,7 +48,10 @@ def compare_builds(a: BuildEffects, b: BuildEffects) -> list[CompareRow]:
     for key, unit in all_keys:
         val_a = a.totals.get((key, unit))
         val_b = b.totals.get((key, unit))
-        category = classify_category(key)
+        # category不重新解析: 讀BuildEffects.categories(parser.py算好的結構化
+        # 欄位一路帶到這裡), a缺就退回b(缺一側totals的key,categories也只在
+        # 有值的那一側)——不得對key字串再跑分類邏輯(spec §5).
+        category = a.categories.get((key, unit)) or b.categories.get((key, unit))
 
         # Determine advantage
         if val_a is not None and val_b is not None:

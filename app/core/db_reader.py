@@ -110,19 +110,6 @@ class DbReader:
         member_item_ids = json.loads(member_item_ids_str) if member_item_ids_str else None
         return (member_item_ids, onstart_src)
 
-    def skill_map(self) -> dict[int, str]:
-        """Load skill map from database.
-
-        Returns:
-            Dictionary mapping skill_id to skill_name.
-        """
-        skill_map = {}
-        cursor = self._conn.cursor()
-        cursor.execute("SELECT skill_id, skill_name FROM skills")
-        for skill_id, skill_name in cursor.fetchall():
-            skill_map[skill_id] = skill_name
-        return skill_map
-
     def _row_to_item_record(self, row) -> ItemRecord:
         """Convert a database row to ItemRecord.
 

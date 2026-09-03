@@ -141,6 +141,22 @@ def test_ignore_prefixes_silent():
     assert not r.trace
 
 
+def test_function_wrapper_line_ignored_no_unrecognized():
+    # C1: M1 stores onstart_equip_src INCLUDING the OnStartEquip = function()
+    # wrapper's opening "function()" line — every real block therefore starts
+    # with it. It must be silently ignored (like the trailing "end", already
+    # a no-op via _handle_end on an empty block_stack), not become a bogus
+    # UNRECOGNIZED "無法辨識" entry.
+    ctx = _ctx()
+    block = "function()\nAddDamage_CRI(1, 7)\nend"
+    r = parser.parse_effect_block(block, ctx, None, _maps())
+    unrecognized = [e for e in r.entries if e.kind == entries.KIND_UNRECOGNIZED]
+    assert len(unrecognized) == 0
+    numeric = [e for e in r.entries if e.key == "爆擊傷害"]
+    assert len(numeric) == 1
+    assert numeric[0].value == 7.0
+
+
 # ---------------------------------------------------------------------------
 # Extra coverage (>= 3 required)
 # ---------------------------------------------------------------------------
@@ -206,6 +222,21 @@ def test_type_stat_combined_line_preserves_quirks():
     r = parser.parse_effect_block(block, ctx, 4, _maps())
     assert ctx.armor_level_map.get(4) == 0  # side-effect default, NOT the stat value 9
     assert any(e.key == "防具等級" and e.value == 9.0 for e in r.entries)
+
+
+def test_eof_unresolved_block_flushed_when_end_missing():
+    # I5: block_text ends without a matching `end` for the open if. Without
+    # the post-loop flush this block would be silently dropped (no
+    # _handle_end ever runs for it, since the for-loop over lines simply
+    # exhausts). Must still surface exactly one KIND_UNRESOLVED entry with
+    # the swallowed raw line collected.
+    ctx = _ctx()  # no scalars -> total_STR unresolvable
+    block = "if total_STR >= 90 then\nAddDamage_CRI(1, 5)"
+    r = parser.parse_effect_block(block, ctx, None, _maps())
+    unres = [e for e in r.entries if e.kind == entries.KIND_UNRESOLVED]
+    assert len(unres) == 1
+    assert "total_STR" in unres[0].extra["missing"]
+    assert any("AddDamage_CRI" in l for l in unres[0].extra["raw_lines"])
 
 
 def test_math_floor_assignment_resolves():

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+import app.cli as cli_module
 import app.core.aggregate as aggregate_module
 import app.core.compare as compare_module
 from app.core.aggregate import evaluate_build
@@ -75,16 +76,19 @@ def test_450263_base_effects():
 
 
 def test_no_display_string_reparsing():
-    """架構鐵則哨兵: aggregate/compare 不得對顯示字串重新做 re.match/re.search 解析.
+    """架構鐵則哨兵: aggregate/compare/cli 不得對顯示字串重新做 re.match/
+    re.search 解析, 也不得重新呼叫 classify_category 對 key 字串重新分類.
 
-    這兩個模組只應該消費 EffectEntry/BuildEffects 的結構化欄位(key/value/unit/
+    這幾個模組只應該消費 EffectEntry/BuildEffects 的結構化欄位(key/value/unit/
     kind/category), 不該再對 parser.py 已經產出的顯示字串(如 se.entry.key)
-    自己重新用正則去猜語意 — 那類邏輯只能活在 parser.py 裡。
+    自己重新用正則去猜語意、或重新推導category — 那類邏輯只能活在 parser.py
+    裡(C2: classify_category在全專案只剩parser.py這一個production呼叫點)。
     """
-    for module in (aggregate_module, compare_module):
+    for module in (aggregate_module, compare_module, cli_module):
         source = inspect.getsource(module)
         assert "re.match" not in source
         assert "re.search" not in source
+        assert "classify_category" not in source
 
 
 def test_full_build_evaluate_smoke():

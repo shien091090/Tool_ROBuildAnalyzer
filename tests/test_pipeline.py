@@ -301,6 +301,10 @@ def test_skills_imported_and_joined(tmp_path):
         "SELECT internal_name, skill_name FROM skills WHERE skill_id=2336").fetchone()
     assert row == ("SR_KNUCKLEARROW", "拳刃箭矢")
     assert report["skills_count"] == 2
+    # _SKILLINFOLIST fixture本身格式乾淨(無損毀列), 只是SR_KNUCKLEARROW/
+    # SR_LIGHTNINGWALK之外多一個UNKNOWN_SKILL — 那是unmatched(skillid查無
+    # 對應id), 不是corrupted(格式損毀), 兩者計數獨立不互相影響.
+    assert report["skills_corrupted_count"] == 0
 
 
 def test_skills_unmatched_count(tmp_path):
@@ -317,4 +321,5 @@ def test_skills_lua_texts_optional_defaults_to_skip(tmp_path):
     report, conn = _run(tmp_path)
     assert report["skills_count"] == 0
     assert report["skills_unmatched_count"] == 0
+    assert report["skills_corrupted_count"] == 0
     assert conn.execute("SELECT COUNT(*) FROM skills").fetchone()[0] == 0

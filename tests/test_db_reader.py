@@ -194,20 +194,6 @@ def test_combo_miss(tmp_path):
     reader.close()
 
 
-def test_skill_map(tmp_path):
-    """Test reading skill map."""
-    db_path = _setup_db(tmp_path)
-    reader = DbReader(db_path)
-
-    skill_map = reader.skill_map()
-    assert isinstance(skill_map, dict)
-    assert skill_map[2336] == "拳刃箭矢"
-    assert skill_map[2335] == "電光步"
-    assert len(skill_map) == 2
-
-    reader.close()
-
-
 def test_json_decode_stat_vector(tmp_path):
     """Test JSON decoding of stat_vector."""
     db_path = _setup_db(tmp_path)

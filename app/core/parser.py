@@ -73,7 +73,7 @@ from app.core.entries import (
 )
 from app.core.maps import EffectMaps
 
-IGNORE_PREFIXES = ("local ", "Stat ", "{Type ", "}")
+IGNORE_PREFIXES = ("local ", "Stat ", "{Type ", "}", "function")
 
 
 @dataclass
@@ -484,7 +484,7 @@ def _match_effect_handlers(
     original's function-scope `sfct_handled = False` / `skill_delay_accum =
     {}` at ro_core.py:572-573 — NOT reset per if/elseif branch).
 
-    #14-41 (魔法段/物理段, ro_core.py:1427-1836), every branch that calls
+    #14-44 (魔法段/物理段, ro_core.py:1427-1836), every branch that calls
     `lua_expr.safe_eval(...)` on an expression argument (i.e. all of them
     EXCEPT #36/#37/#42/#43/#44, which are either DESCRIPTIVE with no value,
     constants, or take a literal digits-only regex capture with no eval step): the
@@ -517,7 +517,8 @@ def _match_effect_handlers(
         skill_name = _skill_name(maps, skill_id)
         key = f"可使用【{skill_name}】Lv.{level}"
         entries_out.append(
-            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER)
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER,
+                        extra={"target_kind": "skill", "target_id": skill_id, "level": level})
         )
         ctx.enabled_skill_levels[skill_id] = level
         return True
@@ -529,7 +530,8 @@ def _match_effect_handlers(
         skill_name = _skill_name(maps, skill_id)
         key = f"使用【{skill_name}】"
         entries_out.append(
-            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER)
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER,
+                        extra={"target_kind": "skill", "target_id": skill_id})
         )
         ctx.used_skill_levels[skill_id] = True
         return True
@@ -1874,6 +1876,18 @@ def parse_effect_block(
             EffectEntry(key="無法辨識", value=None, unit="", kind=KIND_UNRECOGNIZED, category=CAT_OTHER,
                         extra={"raw_line": original_line})
         )
+
+    # ---- EOF unresolved-block flush. If block_text ends without enough
+    # `end` lines to close every open if/elseif/else (malformed/truncated
+    # source), any block still left on block_stack whose condition was never
+    # resolved would otherwise be silently dropped (no _handle_end ever runs
+    # for it). Emit its KIND_UNRESOLVED entry here instead, same shape as
+    # _handle_end's own flush. Blocks that ARE resolved (active True/False,
+    # not unresolved) still get no entry here — only unresolved ones did in
+    # the closed-block path either. ----
+    for block in block_stack:
+        if block["unresolved"]:
+            entries_out.append(_unresolved_entry(block))
 
     # ---- skill_delay_accum flush (ro_core.py:2370-2375). Fed by handler #10
     # (AddSkillDelay/SubSkillDelay, Task 7) — accumulates per skill_name

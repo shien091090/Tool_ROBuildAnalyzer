@@ -39,11 +39,12 @@ def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
     # skillid/skillinfolist是選配的(既有測試/呼叫端不一定會傳), 缺任一個就跳過技能匯入
     skill_rows = []
     skills_unmatched_count = 0
+    skills_corrupted_count = 0
     skillid_text = lua_texts.get("skillid")
     skillinfolist_text = lua_texts.get("skillinfolist")
     if skillid_text is not None and skillinfolist_text is not None:
         skillid_map = skillinfo.parse_skillid(skillid_text)
-        info_map, _corrupted_count = skillinfo.parse_skillinfolist(skillinfolist_text)
+        info_map, skills_corrupted_count = skillinfo.parse_skillinfolist(skillinfolist_text)
         for internal_name, info in info_map.items():
             skill_id = skillid_map.get(internal_name)
             if skill_id is None:
@@ -93,4 +94,5 @@ def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
             t.count("�") for t in lua_texts.values()),
         "skills_count": len(skill_rows),
         "skills_unmatched_count": skills_unmatched_count,
+        "skills_corrupted_count": skills_corrupted_count,
     }

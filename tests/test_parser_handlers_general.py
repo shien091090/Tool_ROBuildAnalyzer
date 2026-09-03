@@ -48,6 +48,11 @@ def test_enable_skill_descriptive_entry_and_writes_ctx():
     assert e.key == "可使用【波動拳】Lv.5"
     assert e.value is None
     assert e.kind == entries.KIND_DESCRIPTIVE
+    # I4: controller ruling — category STAYS CAT_OTHER (skill names may
+    # contain misleading keywords like "MATK", so it does NOT switch to
+    # classify_category), but the entry does gain structured target metadata.
+    assert e.category == entries.CAT_OTHER
+    assert e.extra == {"target_kind": "skill", "target_id": 63, "level": 5}
     assert ctx.enabled_skill_levels[63] == 5
 
 
@@ -83,6 +88,10 @@ def test_use_skill_descriptive_entry_and_writes_ctx():
     assert e.key == "使用【波動拳】"
     assert e.value is None
     assert e.kind == entries.KIND_DESCRIPTIVE
+    # I4: same controller ruling as EnableSkill — category stays CAT_OTHER;
+    # extra has no "level" key (UseSkill takes no skill-level argument).
+    assert e.category == entries.CAT_OTHER
+    assert e.extra == {"target_kind": "skill", "target_id": 63}
     assert ctx.used_skill_levels[63] is True
 
 
