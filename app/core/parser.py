@@ -11,7 +11,8 @@ P.S/Type+Stat/Stat non-gated lines, the if/elseif/else/end state machine
 (extended with the new unresolved-condition mechanism), the V1-V8
 variable-assignment handlers, the handler hook, and the fallback.
 ``_match_effect_handlers`` now implements the 通用段 handlers #1-13
-(EnableSkill..ReceiveItem_Equip, Task 7); Tasks 8-9 append the 魔法段/物理段/
+(EnableSkill..ReceiveItem_Equip, Task 7) plus the 魔法段/物理段 handlers #14-44
+(AddSkillMDamage..SetInvestigate, Task 8); Task 9 appends the remaining
 補完解析段 branches to the same chain.
 
 Deliberate deviations from the original (see task-6 brief for the ruling
@@ -430,7 +431,7 @@ def _match_effect_handlers(
     skill_delay_accum: dict[str, int],
     sfct_state: dict[str, bool],
 ) -> bool:
-    """通用段 handlers #1-13 (ro_core.py:1144-1410).
+    """通用段/魔法段/物理段 handlers #1-44 (ro_core.py:1144-1857).
 
     Ported top-to-bottom, first-match-wins (mirrors the original's
     `if ... and condition_met: ...; continue` chain — this hook is only
@@ -443,6 +444,19 @@ def _match_effect_handlers(
     ``parse_effect_block`` (created once per whole block_text, matching the
     original's function-scope `sfct_handled = False` / `skill_delay_accum =
     {}` at ro_core.py:572-573 — NOT reset per if/elseif branch).
+
+    #14-41 (魔法段/物理段, ro_core.py:1427-1836), every branch that calls
+    `lua_expr.safe_eval(...)` on an expression argument (i.e. all of them
+    EXCEPT #36/#37/#42/#43/#44, which are either DESCRIPTIVE with no value,
+    constants, or take a literal digits-only regex capture with no eval step): the
+    original's `safe_eval_expr` always pads a missing value with 0 and
+    returns a number, so none of these branches have an `isinstance`/None
+    check of their own. This port's `lua_expr.safe_eval` CAN return None —
+    per the task-7 binding rule ("None → UNRECOGNIZED, no exceptions",
+    reaffirmed for this batch by the task-8 brief), every such handler gets a
+    `val is None` guard added even though the original has none. Not called
+    out per-handler below beyond this note, to avoid repeating the same
+    justification ~25 times.
     """
     # 1. EnableSkill(skill_id, level)
     m = re.match(r"EnableSkill\((\d+),\s*(\d+)\)", line)
@@ -684,6 +698,503 @@ def _match_effect_handlers(
         key = "掉寶率"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_OTHER)
+        )
+        return True
+
+    # =====================================================
+    # 魔法段 (ro_core.py:1418-1580)
+    # =====================================================
+
+    # 14. AddSkillMDamage / SubSkillMDamage(elem_id, value_expr) — {屬性}的魔法傷害 %
+    m = re.match(r"(Add|Sub)SkillMDamage\(\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, elem_id, value_expr = m.groups()
+        elem_id = int(elem_id)
+        element = static_maps.ELEMENT_MAP.get(elem_id, f"屬性{elem_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"{element} 的魔法傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+        )
+        return True
+
+    # 15. AddMDamage_Size / SubMDamage_Size(1, size_id, value_expr) —
+    # 對{體型}敵人的魔法傷害 %。size_map miss fallback f"尺寸{size_id}" (ro_core.py:1451).
+    m = re.match(r"(Add|Sub)MDamage_Size\(\s*1\s*,\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, size_id, value_expr = m.groups()
+        size_id = int(size_id)
+        size_name = static_maps.SIZE_MAP.get(size_id, f"尺寸{size_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {size_name} 敵人的魔法傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "size", "target_id": size_id})
+        )
+        return True
+
+    # 16. AddMdamage_Race / SubMdamage_Race(race_id, value_expr) — 對{種族}型怪的魔法傷害 %
+    m = re.match(r"(Add|Sub)Mdamage_Race\(\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, race_id, value_expr = m.groups()
+        race_id = int(race_id)
+        race_name = static_maps.RACE_MAP.get(race_id, f"種族{race_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {race_name} 型怪的魔法傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 17. AddMDamage_Property / SubMDamage_Property(1, elem_id, value_expr) —
+    # 對{屬性}對象的魔法傷害 %
+    m = re.match(r"(Add|Sub)MDamage_Property\(\s*1\s*,\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, elem_id, value_expr = m.groups()
+        elem_id = int(elem_id)
+        elem_name = static_maps.ELEMENT_MAP.get(elem_id, f"屬性{elem_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {elem_name} 對象的魔法傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+        )
+        return True
+
+    # 18. AddMdamage_Class / SubMdamage_Class(class_id, value_expr) — 對{階級}階級的魔法傷害 %
+    m = re.match(r"(Add|Sub)Mdamage_Class\(\s*(\d+)\s*,\s*(.+?)\s*\)", line)
+    if m:
+        op, class_id, value_expr = m.groups()
+        class_id = int(class_id)
+        class_name = static_maps.CLASS_MAP.get(class_id, f"階級{class_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {class_name} 階級的魔法傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+        )
+        return True
+
+    # 19. SetIgnoreMdefClass(class_id, value_expr) — 無視{階級}階級的魔法防禦 %
+    # (no Add/Sub prefix, no sign in the original — value used as-is)
+    m = re.match(r"SetIgnoreMdefClass\((\d+),\s*(.+?)\)", line)
+    if m:
+        class_id, value_expr = m.groups()
+        class_id = int(class_id)
+        class_name = static_maps.CLASS_MAP.get(class_id, f"階級{class_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"無視 {class_name} 階級的魔法防禦"
+        entries_out.append(
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+        )
+        return True
+
+    # 20. SetIgnoreMdefRace(race_id, value_expr) — 無視{種族}型怪的魔法防禦 %
+    m = re.match(r"SetIgnoreMdefRace\((\d+),\s*(.+?)\)", line)
+    if m:
+        race_id, value_expr = m.groups()
+        race_id = int(race_id)
+        race_name = static_maps.RACE_MAP.get(race_id, f"種族{race_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"無視 {race_name} 型怪的魔法防禦"
+        entries_out.append(
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 21. AddIgnore_MRES_RacePercent / SubIgnore_MRES_RacePercent(race_id, value_expr) —
+    # 無視{種族}型怪的魔法抗性 ±%
+    m = re.match(r"(Add|Sub)Ignore_MRES_RacePercent\((\d+),\s*(.+?)\)", line)
+    if m:
+        op, race_id, value_expr = m.groups()
+        race_id = int(race_id)
+        race_name = static_maps.RACE_MAP.get(race_id, f"種族{race_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"無視 {race_name} 型怪的魔法抗性"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 22. MonsterMAtkPercent(value_expr) — 特定魔物魔法增傷 +N% (always positive;
+    # anchored re.match means this never catches a "SubMonsterMAtkPercent(...)"
+    # line, so handler #23 below does not need to run first).
+    m = re.match(r"MonsterMAtkPercent\(\s*(.+)\s*\)", line)
+    if m:
+        val = lua_expr.safe_eval(m.group(1), variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "特定魔物魔法增傷"
+        entries_out.append(
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 23. SubMonsterMAtkPercent(value_expr) — 特定魔物魔法增傷 -N%
+    m = re.match(r"SubMonsterMAtkPercent\(\s*(.+)\s*\)", line)
+    if m:
+        val = lua_expr.safe_eval(m.group(1), variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "特定魔物魔法增傷"
+        entries_out.append(
+            EffectEntry(key=key, value=-val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # =====================================================
+    # 物理段 (ro_core.py:1584-1857)
+    # =====================================================
+
+    # 24. WeaponMasteryATK(value_expr) — 修煉ATK +N (no % unit, always positive)
+    m = re.match(r"WeaponMasteryATK\(\s*(.+?)\s*\)", line)
+    if m:
+        val = lua_expr.safe_eval(m.group(1), variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "修煉ATK"
+        entries_out.append(
+            EffectEntry(key=key, value=val, unit="", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 25. Kamui_SpecialATK(value_expr) — 神威ATK +N (no % unit, always positive)
+    m = re.match(r"Kamui_SpecialATK\(\s*(.+?)\s*\)", line)
+    if m:
+        val = lua_expr.safe_eval(m.group(1), variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "神威ATK"
+        entries_out.append(
+            EffectEntry(key=key, value=val, unit="", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 26. AddGuideAttack(value_expr) — 誘導攻擊機率 +N% (always positive)
+    m = re.match(r"AddGuideAttack\(\s*(.+?)\s*\)", line)
+    if m:
+        val = lua_expr.safe_eval(m.group(1), variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "誘導攻擊機率"
+        entries_out.append(
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 27. AddDamage_HIT / SubDamage_HIT(1, value_expr) — 物理命中傷害 ±N%
+    m = re.match(r"(Add|Sub)Damage_HIT\(\s*1\s*,\s*(.+)\)", line)
+    if m:
+        op, value_expr = m.groups()
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "物理命中傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 28. AddMeleeAttackDamage / SubMeleeAttackDamage(1, value_expr) — 近距離物理傷害 ±N%
+    m = re.match(r"(Add|Sub)MeleeAttackDamage\(\s*1\s*,\s*(.+)\)", line)
+    if m:
+        op, value_expr = m.groups()
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "近距離物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 29. AddRangeAttackDamage / SubRangeAttackDamage(1, value_expr) — 遠距離物理傷害 ±N%
+    m = re.match(r"(Add|Sub)RangeAttackDamage\(\s*1\s*,\s*(.+)\)", line)
+    if m:
+        op, value_expr = m.groups()
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "遠距離物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 30. AddBowAttackDamage(1, value_expr) — 弓攻擊力 +N% (always positive; no
+    # Sub variant in the original — the commented-out SubBowAttackDamage at
+    # ro_core.py:2288-2296 is dead code, not ported per inventory doc §死碼).
+    m = re.match(r"AddBowAttackDamage\(\s*1\s*,\s*(.+)\)", line)
+    if m:
+        val = lua_expr.safe_eval(m.group(1), variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "弓攻擊力"
+        entries_out.append(
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 31. AddDamage_CRI / SubDamage_CRI(1, value_expr) — 爆擊傷害 ±N%
+    m = re.match(r"(Add|Sub)Damage_CRI\(\s*1\s*,\s*(.+)\)", line)
+    if m:
+        op, value_expr = m.groups()
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "爆擊傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 32. AddDamage_Size / SubDamage_Size(1, size_id, value_expr) — 對{體型}敵人的物理傷害 ±N%.
+    # size_map miss fallback f"體型{size_id}" (ro_core.py:1706) — deliberately
+    # DIFFERENT from #15's f"尺寸{size_id}" fallback; the original itself is
+    # inconsistent here, ported verbatim per-handler.
+    m = re.match(r"(Add|Sub)Damage_Size\(\s*1\s*,\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, size_id, value_expr = m.groups()
+        size_id = int(size_id)
+        size_name = static_maps.SIZE_MAP.get(size_id, f"體型{size_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {size_name} 敵人的物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "size", "target_id": size_id})
+        )
+        return True
+
+    # 33. RaceAddDamage / RaceSubDamage(race_id, value_expr) — 對{種族}型怪的物理傷害 ±N%
+    m = re.match(r"Race(Add|Sub)Damage\(\s*(\d+)\s*,\s*(.+)\s*\)\s*$", line)
+    if m:
+        op, race_id, value_expr = m.groups()
+        race_id = int(race_id)
+        race_name = static_maps.RACE_MAP.get(race_id, f"種族{race_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {race_name} 型怪的物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 34. AddDamage_Property / SubDamage_Property(1, elem_id, value_expr) —
+    # 對{屬性}對象的物理傷害 ±N%
+    m = re.match(r"(Add|Sub)Damage_Property\(\s*1\s*,\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, elem_id, value_expr = m.groups()
+        elem_id = int(elem_id)
+        elem_name = static_maps.ELEMENT_MAP.get(elem_id, f"屬性{elem_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {elem_name} 對象的物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+        )
+        return True
+
+    # 35. ClassAddDamage / ClassSubDamage(class_id, 1, value_expr) — 對{階級}階級的物理傷害 ±N%
+    m = re.match(r"Class(Add|Sub)Damage\(\s*(\d+)\s*,\s*1\s*,\s*(.+?)\s*\)", line)
+    if m:
+        op, class_id, value_expr = m.groups()
+        class_id = int(class_id)
+        class_name = static_maps.CLASS_MAP.get(class_id, f"階級{class_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {class_name} 階級的物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+        )
+        return True
+
+    # 36. SetIgnoreDEFClass(class_id) — 無視{階級}階級的物理防禦 (DESCRIPTIVE, no value —
+    # the original emits no percentage at all here, unlike #37/#42).
+    m = re.match(r"SetIgnoreDEFClass\((\d+)\)", line)
+    if m:
+        class_id = int(m.group(1))
+        class_name = static_maps.CLASS_MAP.get(class_id, f"階級{class_id}")
+        key = f"無視 {class_name} 階級的物理防禦"
+        entries_out.append(
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE,
+                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+        )
+        return True
+
+    # 37. SetIgnoreDefClass_Percent(class_id, value) — 無視{階級}階級的物理防禦 N%.
+    # `value` is captured directly as \d+ by the regex (the original doesn't
+    # run this one through safe_eval_expr either) — always resolves, no
+    # None-safety needed. No sign (value used as-is, always non-negative).
+    m = re.match(r"SetIgnoreDefClass_Percent\((\d+),\s*(\d+)\)", line)
+    if m:
+        class_id, value = m.groups()
+        class_id = int(class_id)
+        class_name = static_maps.CLASS_MAP.get(class_id, f"階級{class_id}")
+        key = f"無視 {class_name} 階級的物理防禦"
+        entries_out.append(
+            EffectEntry(key=key, value=float(value), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+        )
+        return True
+
+    # 38. SetIgnoreDefRace_Percent(race_id, value_expr) — 無視{種族}型怪的物理防禦 N%
+    # (no Add/Sub prefix, no sign — value used as-is, same shape as #19/#20)
+    m = re.match(r"SetIgnoreDefRace_Percent\((\d+),\s*(.+?)\)", line)
+    if m:
+        race_id, value_expr = m.groups()
+        race_id = int(race_id)
+        race_name = static_maps.RACE_MAP.get(race_id, f"種族{race_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"無視 {race_name} 型怪的物理防禦"
+        entries_out.append(
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 39. AddIgnore_RES_RacePercent / SubIgnore_RES_RacePercent(race_id, value_expr) —
+    # 無視{種族}型怪的物理抗性 ±N%
+    m = re.match(r"(Add|Sub)Ignore_RES_RacePercent\((\d+),\s*(.+?)\)", line)
+    if m:
+        op, race_id, value_expr = m.groups()
+        race_id = int(race_id)
+        race_name = static_maps.RACE_MAP.get(race_id, f"種族{race_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"無視 {race_name} 型怪的物理抗性"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 40. MonsterAtkPercent(value_expr) — 特定魔物物理增傷 +N% (always positive;
+    # anchored re.match means this never catches a "SubMonsterAtkPercent(...)"
+    # line, so handler #41 below does not need to run first).
+    m = re.match(r"MonsterAtkPercent\(\s*(.+)\s*\)", line)
+    if m:
+        val = lua_expr.safe_eval(m.group(1), variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "特定魔物物理增傷"
+        entries_out.append(
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 41. SubMonsterAtkPercent(value_expr) — 特定魔物物理增傷 -N%
+    m = re.match(r"SubMonsterAtkPercent\(\s*(.+)\s*\)", line)
+    if m:
+        val = lua_expr.safe_eval(m.group(1), variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "特定魔物物理增傷"
+        entries_out.append(
+            EffectEntry(key=key, value=-val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 42. SetIgnoreDEFRace(race_id) — 無視{種族}型怪的物理防禦 +100% (constant, NUMERIC).
+    m = re.match(r"SetIgnoreDEFRace\((\d+)\)", line)
+    if m:
+        race_id = int(m.group(1))
+        race_name = static_maps.RACE_MAP.get(race_id, f"種族{race_id}")
+        key = f"無視 {race_name} 型怪的物理防禦"
+        entries_out.append(
+            EffectEntry(key=key, value=100.0, unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 43. PerfectDamage(1) — 武器體型修正 100% (DESCRIPTIVE constant; original
+    # literal string ro_core.py:1849 is "武器體型修正 100%" with a space before
+    # the number — the inventory doc's own summary line drops that space,
+    # ported the literal source string instead).
+    m = re.match(r"PerfectDamage\(1\)\s*$", line)
+    if m:
+        key = "武器體型修正 100%"
+        entries_out.append(
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=classify_category(key))
+        )
+        return True
+
+    # 44. SetInvestigate() — 浸透勁 (DESCRIPTIVE) + 全種族無視物防+100% (NUMERIC, like #42).
+    # Deliberate regex fix vs ro_core.py:1852: the original's
+    # `re.match(r"SetInvestigate()", line)` has an EMPTY capture group —
+    # `()` in regex is a zero-width empty group, not a literal `()` — so the
+    # pattern is equivalent to a bare `SetInvestigate` prefix match (it would
+    # also match e.g. "SetInvestigateXYZ" as a prefix). Fixed here to require
+    # an actual empty-argument call. The commented-out
+    # `context.used_skill_levels[266] = True` (ro_core.py:1856) is dead code
+    # moved to the calculation layer by the original author — NOT ported
+    # (inventory doc 狀態副作用#7).
+    m = re.match(r"SetInvestigate\s*\(\s*\)", line)
+    if m:
+        entries_out.append(
+            EffectEntry(key="武器浸透勁效果", value=None, unit="", kind=KIND_DESCRIPTIVE,
+                        category=classify_category("武器浸透勁效果"))
+        )
+        key2 = "無視 全種族 型怪的物理防禦"
+        entries_out.append(
+            EffectEntry(key=key2, value=100.0, unit="%", kind=KIND_NUMERIC, category=classify_category(key2))
         )
         return True
 
