@@ -8,6 +8,8 @@ _GRF_LUB_TARGETS = {
         "data\\luafiles514\\lua files\\equipmentproperties\\equipmentproperties.lub",
     "enchant": "data\\luafiles514\\lua files\\enchant\\enchantlist.lub",
     "itemdbname": "data\\luafiles514\\lua files\\itemdbnametbl.lub",
+    "skillid": "data\\luafiles514\\lua files\\skillinfoz\\skillid.lub",
+    "skillinfolist": "data\\luafiles514\\lua files\\skillinfoz\\skillinfolist.lub",
 }
 # 反編譯器選用比照SNShienRODataBase驗證過的組合:
 # equipment_properties用unluac(luadec對這支會產出壞結構), 其餘用luadec

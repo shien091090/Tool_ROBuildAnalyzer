@@ -3,7 +3,7 @@ import sqlite3
 from collections import defaultdict
 
 from importer import db
-from importer.parsers import enchant, equipment_properties, iteminfo, itemdbname
+from importer.parsers import enchant, equipment_properties, iteminfo, itemdbname, skillinfo
 
 
 def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
@@ -36,6 +36,25 @@ def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
             "combi_ids": eq.get("combi_item_ids"),
         })
 
+    # skillid/skillinfolist是選配的(既有測試/呼叫端不一定會傳), 缺任一個就跳過技能匯入
+    skill_rows = []
+    skills_unmatched_count = 0
+    skillid_text = lua_texts.get("skillid")
+    skillinfolist_text = lua_texts.get("skillinfolist")
+    if skillid_text is not None and skillinfolist_text is not None:
+        skillid_map = skillinfo.parse_skillid(skillid_text)
+        info_map, _corrupted_count = skillinfo.parse_skillinfolist(skillinfolist_text)
+        for internal_name, info in info_map.items():
+            skill_id = skillid_map.get(internal_name)
+            if skill_id is None:
+                skills_unmatched_count += 1
+                continue
+            skill_rows.append({
+                "skill_id": skill_id,
+                "internal_name": internal_name,
+                "skill_name": info["skill_name"],
+            })
+
     weight_sums = defaultdict(int)
     for r in enchant_rows:
         weight_sums[(r["table_index"], r["slot_index"])] += r["option_weight"]
@@ -47,6 +66,7 @@ def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
         db.insert_items(conn, items)
         db.insert_combos(conn, combos)
         db.insert_enchants(conn, enchant_rows)
+        db.insert_skills(conn, skill_rows)
         db.set_meta(conn, "grf_fingerprint", grf_fingerprint)
         db.set_meta(conn, "import_date", datetime.date.today().isoformat())
         conn.commit()
@@ -71,4 +91,6 @@ def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
             1 for i in items if i["internal_name"] is None),
         "decode_replacement_char_count": sum(
             t.count("�") for t in lua_texts.values()),
+        "skills_count": len(skill_rows),
+        "skills_unmatched_count": skills_unmatched_count,
     }

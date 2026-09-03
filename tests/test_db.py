@@ -9,11 +9,11 @@ def _conn():
     return c
 
 
-def test_create_builds_four_tables():
+def test_create_builds_five_tables():
     c = _conn()
     names = {r[0] for r in c.execute(
         "SELECT name FROM sqlite_master WHERE type='table'")}
-    assert {"items", "combos", "enchant_tables", "import_meta"} <= names
+    assert {"items", "combos", "enchant_tables", "import_meta", "skills"} <= names
 
 
 def test_insert_items_roundtrip_json_fields():
@@ -69,6 +69,17 @@ def test_insert_enchants():
     ).fetchone()
     assert json.loads(row[0]) == ["Lunar_E_Armor_LT"]
     assert row[1] == 13600
+
+
+def test_insert_skills_roundtrip():
+    c = _conn()
+    db.insert_skills(c, [{
+        "skill_id": 2336, "internal_name": "SR_KNUCKLEARROW", "skill_name": "拳刃箭矢",
+    }])
+    row = c.execute(
+        "SELECT internal_name, skill_name FROM skills WHERE skill_id=2336"
+    ).fetchone()
+    assert row == ("SR_KNUCKLEARROW", "拳刃箭矢")
 
 
 def test_meta_roundtrip():

@@ -258,3 +258,63 @@ def test_fingerprint_and_date_written(tmp_path):
     assert fp[0] == "123:456"
     assert conn.execute(
         "SELECT value FROM import_meta WHERE key='import_date'").fetchone() is not None
+
+
+_SKILLID = 'SKID = {SR_KNUCKLEARROW = 2336, SR_LIGHTNINGWALK = 2335}'
+
+_SKILLINFOLIST = (
+    'SKILL_INFO_LIST = {\n'
+    '[SKID.SR_KNUCKLEARROW] = {"SR_KNUCKLEARROW"; SkillName = "拳刃箭矢", MaxLv = 10, \n'
+    'SpAmount = {12}, bSeperateLv = false, \n'
+    'AttackRange = {7}}, \n'
+    '[SKID.SR_LIGHTNINGWALK] = {"SR_LIGHTNINGWALK"; SkillName = "電光步", MaxLv = 5, \n'
+    'SpAmount = {10}, bSeperateLv = false, \n'
+    'AttackRange = {1}}, \n'
+    # UNKNOWN_SKILL沒有出現在_SKILLID裡, 用來驗證skills_unmatched_count
+    '[SKID.UNKNOWN_SKILL] = {"UNKNOWN_SKILL"; SkillName = "未知技能", MaxLv = 1, \n'
+    'SpAmount = {1}, bSeperateLv = false, \n'
+    'AttackRange = {1}}, \n'
+    '}'
+)
+
+
+def _run_with_skills(tmp_path):
+    db_path = str(tmp_path / "skills.db")
+    report = pipeline.run(
+        {
+            "iteminfo": _ITEMINFO,
+            "itemdbname": _ITEMDBNAME,
+            "equipment_properties": _EQUIP_PROPS,
+            "enchant": _ENCHANT,
+            "skillid": _SKILLID,
+            "skillinfolist": _SKILLINFOLIST,
+        },
+        db_path,
+        "123:456",
+    )
+    return report, sqlite3.connect(db_path)
+
+
+def test_skills_imported_and_joined(tmp_path):
+    report, conn = _run_with_skills(tmp_path)
+    row = conn.execute(
+        "SELECT internal_name, skill_name FROM skills WHERE skill_id=2336").fetchone()
+    assert row == ("SR_KNUCKLEARROW", "拳刃箭矢")
+    assert report["skills_count"] == 2
+
+
+def test_skills_unmatched_count(tmp_path):
+    report, conn = _run_with_skills(tmp_path)
+    # UNKNOWN_SKILL在skillinfolist有定義但skillid沒有對應id, 應被跳過且計入unmatched
+    assert report["skills_unmatched_count"] == 1
+    row = conn.execute(
+        "SELECT * FROM skills WHERE internal_name='UNKNOWN_SKILL'").fetchone()
+    assert row is None
+
+
+def test_skills_lua_texts_optional_defaults_to_skip(tmp_path):
+    # 既有測試不帶skillid/skillinfolist這兩個key, 應視為跳過技能匯入而非報錯
+    report, conn = _run(tmp_path)
+    assert report["skills_count"] == 0
+    assert report["skills_unmatched_count"] == 0
+    assert conn.execute("SELECT COUNT(*) FROM skills").fetchone()[0] == 0
