@@ -65,7 +65,8 @@ Tool_ROBuildAnalyzer/
 
 | 表 | 內容 |
 |---|---|
-| `items` | item_id / internal_name / display_name / type / slot數(洞) / **effect_lua原文**(OnStartEquip整段) / Stat向量 / Combiitem清單 |
+| `items` | item_id / internal_name / display_name / description(道具完整敘述, tooltip用) / type / slot數(洞) / **effect_lua原文**(OnStartEquip整段) / Stat向量 / Combiitem清單(combo_id參照) |
+| `combos` | combo_id / 套裝成員item_ids / **套裝效果lua原文**(套裝效果定義在獨立的Combiitem表, 不在個別item裡) |
 | `enchant_tables` | table_index / 適用裝備internal_names / slot_index / 詞條internal_name / weight / 每次費用(Zeny+材料, 支援多材料) |
 | `import_meta` | 匯入日期 / data.grf指紋(檔案大小+mtime) |
 
