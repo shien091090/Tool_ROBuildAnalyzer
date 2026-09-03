@@ -535,10 +535,11 @@ def _match_effect_handlers(
         return True
 
     # 6. AddSFCTEquipAmount / SubSFCTEquipAmount(item_id?, ms_expr, dummy) —
-    # 固定詠唱時間 秒 (ms/1000). sfct_handled once-lock shared with #7: once
-    # true, this and #7 stop matching for the REST of this block_text (the
-    # line then falls through to the general fallback → UNRECOGNIZED),
-    # mirroring the original's `and not sfct_handled` guard.
+    # 固定詠唱時間 秒 (ms/1000). sfct_handled once-lock: ASYMMETRIC in the
+    # original, ported as-is (ruling: restore original behavior, not the
+    # symmetric lock this port previously had). ro_core.py:1264 (#6) checks
+    # `not sfct_handled` AND ro_core.py:1276 sets `sfct_handled = True` after
+    # emitting — #6 is the only branch that ever sets the lock.
     m = re.match(r"(Add|Sub)SFCTEquipAmount\(\s*(?:(\d+)\s*,\s*)?(.+?)\s*,\s*(\d+)\s*\)\s*$", line)
     if m and not sfct_state["handled"]:
         op, _item_id, expr, _dummy = m.groups()
@@ -555,12 +556,18 @@ def _match_effect_handlers(
         return True
 
     # 7. AddSFCTEquipPermill / SubSFCTEquipPermill(item_id?, permill_expr, dummy) —
-    # 固定詠唱時間 % (permill/10). Same sfct_handled lock as #6.
+    # 固定詠唱時間 % (permill/10). ro_core.py:1283 checks `not sfct_handled`
+    # (so a prior #6 match blocks this) but ro_core.py:1283-1297's own body
+    # NEVER sets `sfct_handled = True` — this branch alone can never trip the
+    # lock. Consequence (verified against the source, not a guess): a #7
+    # line followed by a #6 line both emit (the #7 line never locked
+    # anything); a #6 line followed by a #7 line — only #6 emits (the #6
+    # line already tripped the lock). Deliberately asymmetric; do not
+    # "fix" by adding `sfct_state["handled"] = True` here.
     m = re.match(r"(Add|Sub)SFCTEquipPermill\(\s*(?:(\d+)\s*,\s*)?(.+?)\s*,\s*(\d+)\s*\)\s*$", line)
     if m and not sfct_state["handled"]:
         op, _item_id, expr, _dummy = m.groups()
         val = lua_expr.safe_eval(expr, variables, ctx, slot_id)
-        sfct_state["handled"] = True
         if val is None:
             # Deliberate fix vs literal transliteration: the original does
             # `val = val // 10` BEFORE checking whether `val` parsed, which

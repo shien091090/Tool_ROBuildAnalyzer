@@ -196,8 +196,22 @@ def test_spell_cast_time_add_and_sub():
     assert r_sub.entries[0].value == -20.0
 
 
+def test_spell_cast_time_unresolvable_becomes_unrecognized():
+    ctx = _ctx()  # no scalars -> total_STR unresolvable
+    r = parser.parse_effect_block("AddSpellCastTime(total_STR)", ctx, None, _maps())
+    assert len(r.entries) == 1
+    e = r.entries[0]
+    assert e.kind == entries.KIND_UNRECOGNIZED
+    assert e.key == "無法辨識"
+    assert e.extra["raw_line"] == "AddSpellCastTime(total_STR)"
+
+
 # ---------------------------------------------------------------------------
-# #6/#7 SFCT (sfct_handled once-lock + ms/1000 + permill/10)
+# #6/#7 SFCT (sfct_handled once-lock, ASYMMETRIC per original ro_core.py:
+# only #6 AddSFCTEquipAmount/SubSFCTEquipAmount ever sets the lock
+# (ro_core.py:1276); #7 AddSFCTEquipPermill/SubSFCTEquipPermill checks it
+# but never sets it (ro_core.py:1283-1297). So: #7-then-#6 → both emit;
+# #6-then-#7 → only #6 emits; #6-then-#6 → only first #6 emits.)
 # ---------------------------------------------------------------------------
 
 
@@ -219,7 +233,9 @@ def test_sfct_equip_permill_to_percent():
     assert numeric[0].unit == "%"
 
 
-def test_sfct_once_lock_two_lines_only_first_emits():
+def test_sfct_amount_then_permill_only_amount_emits():
+    # #6 (Amount) locks the chain; #7 (Permill) checks the lock and is
+    # blocked. Only #6's entry emits.
     ctx = _ctx()
     block = "AddSFCTEquipAmount(1000,500,0)\nAddSFCTEquipPermill(1000,150,0)\n"
     r = parser.parse_effect_block(block, ctx, None, _maps())
@@ -227,6 +243,21 @@ def test_sfct_once_lock_two_lines_only_first_emits():
     assert len(numeric) == 1
     assert numeric[0].value == 0.5
     assert numeric[0].unit == "秒"
+
+
+def test_sfct_permill_then_amount_both_emit():
+    # #7 (Permill) never sets the lock, so a subsequent #6 (Amount) line is
+    # NOT blocked — both emit. This is the original's genuine asymmetry,
+    # not a bug in this port.
+    ctx = _ctx()
+    block = "AddSFCTEquipPermill(1000,150,0)\nAddSFCTEquipAmount(1000,500,0)\n"
+    r = parser.parse_effect_block(block, ctx, None, _maps())
+    numeric = [e for e in r.entries if e.key == "固定詠唱時間"]
+    assert len(numeric) == 2
+    percent_entry = next(e for e in numeric if e.unit == "%")
+    seconds_entry = next(e for e in numeric if e.unit == "秒")
+    assert percent_entry.value == 15.0  # 150 // 10
+    assert seconds_entry.value == 0.5  # 500 / 1000
 
 
 def test_sfct_once_lock_two_amount_lines_only_first_emits():
@@ -355,3 +386,13 @@ def test_receive_item_equip_sub():
     ctx = _ctx()
     r = parser.parse_effect_block("SubReceiveItem_Equip(5)", ctx, None, _maps())
     assert r.entries[0].value == -5.0
+
+
+def test_receive_item_equip_unresolvable_becomes_unrecognized():
+    ctx = _ctx()  # no scalars -> total_STR unresolvable
+    r = parser.parse_effect_block("AddReceiveItem_Equip(total_STR)", ctx, None, _maps())
+    assert len(r.entries) == 1
+    e = r.entries[0]
+    assert e.kind == entries.KIND_UNRECOGNIZED
+    assert e.key == "無法辨識"
+    assert e.extra["raw_line"] == "AddReceiveItem_Equip(total_STR)"
