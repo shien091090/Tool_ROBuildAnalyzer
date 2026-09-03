@@ -1,5 +1,5 @@
-# importer/cli.py
 import os
+import subprocess
 
 from importer import config, decompile, fingerprint, grf, pipeline
 
@@ -15,7 +15,11 @@ _UNLUAC_KEYS = {"equipment_properties"}
 
 
 def main() -> None:
-    cfg = config.load()
+    try:
+        cfg = config.load()
+    except (config.ConfigNotFoundError, config.ConfigInvalidError) as e:
+        raise SystemExit(str(e))
+
     os.makedirs("data/lub", exist_ok=True)
     os.makedirs("data/lua", exist_ok=True)
     os.makedirs(os.path.dirname(cfg.db_path) or ".", exist_ok=True)
@@ -25,7 +29,9 @@ def main() -> None:
 
     lub_paths = {}
     for key, rel in _GRF_LUB_TARGETS.items():
-        entry = index[rel]
+        entry = index.get(rel)
+        if entry is None:
+            raise SystemExit(f"GRF內找不到 {rel} — client資料結構可能已變更, 請回報")
         lub_path = f"data/lub/{key}.lub"
         with open(lub_path, "wb") as f:
             f.write(grf.extract(cfg.data_grf_path, entry))
@@ -38,10 +44,14 @@ def main() -> None:
     for key, lub_path in lub_paths.items():
         out_path = f"data/lua/{key}.lua"
         print(f"反編譯 {key}…")
-        if key in _UNLUAC_KEYS:
-            decompile.run_unluac(cfg.java_exe, config.UNLUAC_JAR, lub_path, out_path)
-        else:
-            decompile.run_luadec(config.LUADEC_EXE, lub_path, out_path)
+        try:
+            if key in _UNLUAC_KEYS:
+                decompile.run_unluac(cfg.java_exe, config.UNLUAC_JAR, lub_path, out_path)
+            else:
+                decompile.run_luadec(config.LUADEC_EXE, lub_path, out_path)
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.decode(errors="replace") if e.stderr else ""
+            raise SystemExit(f"反編譯 {key} 失敗 ({lub_path}): {stderr}")
         with open(out_path, encoding="utf-8", errors="replace") as f:
             lua_texts[key] = f.read()
 

@@ -11,6 +11,10 @@ class ConfigNotFoundError(Exception):
     pass
 
 
+class ConfigInvalidError(Exception):
+    pass
+
+
 @dataclass
 class Config:
     dro_path: str
@@ -33,6 +37,10 @@ def load(path: str = "config.json") -> Config:
         )
     with open(path, encoding="utf-8") as f:
         raw = json.load(f)
+    if "dro_path" not in raw:
+        raise ConfigInvalidError(
+            f"config.json 缺少 dro_path 欄位, 請填入DRO遊戲資料夾路徑"
+        )
     return Config(
         dro_path=raw["dro_path"],
         java_exe=raw.get("java_exe", "java"),

@@ -28,3 +28,19 @@ def test_load_missing_file_raises_with_hint(tmp_path):
     with pytest.raises(config.ConfigNotFoundError) as e:
         config.load(str(tmp_path / "nope.json"))
     assert "config.example.json" in str(e.value)
+
+
+def test_load_missing_dro_path_raises_config_invalid_error(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"java_exe": "java"}), encoding="utf-8")
+    with pytest.raises(config.ConfigInvalidError) as e:
+        config.load(str(p))
+    assert "dro_path" in str(e.value)
+
+
+def test_load_applies_java_exe_and_db_path_defaults(tmp_path):
+    p = tmp_path / "config.json"
+    p.write_text(json.dumps({"dro_path": "D:\\DRO"}), encoding="utf-8")
+    cfg = config.load(str(p))
+    assert cfg.java_exe == "java"
+    assert cfg.db_path == "data/ro_items.db"

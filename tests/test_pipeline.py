@@ -114,6 +114,14 @@ def test_report_counts(tmp_path):
     assert report["enchant_tables_count"] == 2
     # table10004 slot1總和=500000正常, table10005 slot2總和=100000 → 1組異常
     assert report["enchant_weight_anomaly_count"] == 1
+    # 999999在iteminfo有定義但itemdbname無對應internal_name, 450263有 → 缺1個
+    assert report["items_missing_internal_name_count"] == 1
+    # equipment_properties只定義450263, 該id在iteminfo也有定義 → 0個孤兒
+    assert report["equip_items_not_in_iteminfo_count"] == 0
+    # itemdbname只有一筆別名, 無collision
+    assert report["itemdbname_alias_collision_count"] == 0
+    # fixture文字皆為乾淨字串, 無解碼替代字元
+    assert report["decode_replacement_char_count"] == 0
 
 
 _ITEMINFO_DUPLICATE = """
@@ -151,7 +159,96 @@ def test_duplicate_item_id_last_write_wins_and_counted(tmp_path):
         "SELECT display_name FROM items WHERE item_id=450263").fetchone()
     assert row[0] == "新名稱"
     assert report["items_count"] == 1
-    assert report["iteminfo_duplicate_id_count"] == 1
+    assert report["iteminfo_duplicate_row_count"] == 1
+
+
+_ITEMINFO_TRIPLICATE = """
+tbl = {
+  [450263] = {
+    identifiedDisplayName = "名稱A",
+    identifiedDescriptionName = { "第一行" },
+    slotCount = 0,
+    ClassNum = 0,
+  },
+  [450263] = {
+    identifiedDisplayName = "名稱B",
+    identifiedDescriptionName = { "第一行" },
+    slotCount = 0,
+    ClassNum = 0,
+  },
+  [450263] = {
+    identifiedDisplayName = "名稱C",
+    identifiedDescriptionName = { "第一行" },
+    slotCount = 0,
+    ClassNum = 0,
+  },
+}
+"""
+
+
+def test_triplicate_item_id_last_write_wins_and_counted(tmp_path):
+    db_path = str(tmp_path / "triple.db")
+    report = pipeline.run(
+        {
+            "iteminfo": _ITEMINFO_TRIPLICATE,
+            "itemdbname": _ITEMDBNAME,
+            "equipment_properties": _EQUIP_PROPS,
+            "enchant": _ENCHANT,
+        },
+        db_path,
+        "123:456",
+    )
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT display_name FROM items WHERE item_id=450263").fetchone()
+    assert row[0] == "名稱C"
+    assert report["items_count"] == 1
+    assert report["iteminfo_duplicate_row_count"] == 2
+
+
+_EQUIP_PROPS_ORPHAN = """
+Item = {
+  [450263] = {
+    Type = "armor",
+    Stat = { 10, 0, 2 },
+    OnStartEquip = function()
+      AddDamage_CRI(1, 7)
+    end,
+    Combiitem = { 2000000007 }
+  },
+  [777777] = {
+    Type = "weapon",
+    Stat = { 1, 0, 0 },
+  }
+}
+Combiitem = {
+  [2000000007] = {
+    Item = {450263, 4299},
+    OnStartEquip = function()
+      AddExtParam(0, 242, 2)
+    end
+  }
+}
+"""
+
+
+def test_equip_item_not_in_iteminfo_counted_and_dropped(tmp_path):
+    db_path = str(tmp_path / "orphan.db")
+    report = pipeline.run(
+        {
+            "iteminfo": _ITEMINFO,
+            "itemdbname": _ITEMDBNAME,
+            "equipment_properties": _EQUIP_PROPS_ORPHAN,
+            "enchant": _ENCHANT,
+        },
+        db_path,
+        "123:456",
+    )
+    conn = sqlite3.connect(db_path)
+    row = conn.execute(
+        "SELECT item_id FROM items WHERE item_id=777777").fetchone()
+    assert row is None
+    assert report["equip_items_not_in_iteminfo_count"] == 1
 
 
 def test_fingerprint_and_date_written(tmp_path):

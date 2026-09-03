@@ -16,7 +16,8 @@ def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
     enchant_rows = enchant.parse(lua_texts["enchant"])
 
     info_by_id = {r["item_id"]: r for r in info_rows}
-    iteminfo_duplicate_id_count = len(info_rows) - len(info_by_id)
+    # 超額列數(同item_id在iteminfo原始資料中被定義超過一次而多出來的列數), 非重複ID個數
+    iteminfo_duplicate_row_count = len(info_rows) - len(info_by_id)
 
     items = []
     for info in info_by_id.values():
@@ -62,5 +63,12 @@ def run(lua_texts: dict[str, str], db_path: str, grf_fingerprint: str) -> dict:
         "enchant_rules_count": len(enchant_rows),
         "enchant_tables_count": len({r["table_index"] for r in enchant_rows}),
         "enchant_weight_anomaly_count": anomaly_count,
-        "iteminfo_duplicate_id_count": iteminfo_duplicate_id_count,
+        "iteminfo_duplicate_row_count": iteminfo_duplicate_row_count,
+        "equip_items_not_in_iteminfo_count": sum(
+            1 for iid in equip_rows if iid not in info_by_id),
+        "itemdbname_alias_collision_count": len(name_to_id) - len(id_to_name),
+        "items_missing_internal_name_count": sum(
+            1 for i in items if i["internal_name"] is None),
+        "decode_replacement_char_count": sum(
+            t.count("�") for t in lua_texts.values()),
     }

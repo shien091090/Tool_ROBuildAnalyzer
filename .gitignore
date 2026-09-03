@@ -7,3 +7,4 @@ data/lua/
 config.json
 .worktrees/
 .superpowers/
+.pytest_cache/
