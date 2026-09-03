@@ -11,9 +11,10 @@ P.S/Type+Stat/Stat non-gated lines, the if/elseif/else/end state machine
 (extended with the new unresolved-condition mechanism), the V1-V8
 variable-assignment handlers, the handler hook, and the fallback.
 ``_match_effect_handlers`` now implements the 通用段 handlers #1-13
-(EnableSkill..ReceiveItem_Equip, Task 7) plus the 魔法段/物理段 handlers #14-44
-(AddSkillMDamage..SetInvestigate, Task 8); Task 9 appends the remaining
-補完解析段 branches to the same chain.
+(EnableSkill..ReceiveItem_Equip, Task 7), the 魔法段/物理段 handlers #14-44
+(AddSkillMDamage..SetInvestigate, Task 8), and the 補完解析段 handlers #45-68
+(AddHealValue..Condition, Task 9) — the full handler chain from
+ro_core.py:1144-2350.
 
 Deliberate deviations from the original (see task-6 brief for the ruling
 text backing each):
@@ -65,6 +66,7 @@ from app.core.entries import (
     EffectEntry,
     KIND_DESCRIPTIVE,
     KIND_NUMERIC,
+    KIND_PROC,
     KIND_UNRECOGNIZED,
     KIND_UNRESOLVED,
     classify_category,
@@ -421,6 +423,32 @@ def _signed(val: float, op: str) -> float:
     return val if op == "Add" else -val
 
 
+def _map_int_arg_with_id(
+    args: list[str] | None,
+    index: int,
+    mapping: dict,
+    fallback_prefix: str,
+    variables: dict,
+    ctx: CalcContext,
+    slot_id: int | None,
+) -> tuple[int | None, str]:
+    """Like ``lua_expr.map_int_arg`` (ro_core.py:799-809), but also returns the
+    resolved int id (or None on total failure) alongside the mapped name — the
+    #45-68 batch's (c)-type handlers need both: the name for the key string,
+    the id for extra={"target_id": ...} metadata (task-7 移植轉換規則).
+    """
+    if args is None or index >= len(args):
+        return None, f"{fallback_prefix}?"
+    try:
+        key = int(lua_expr.safe_eval(args[index], variables, ctx, slot_id))
+    except Exception:
+        try:
+            key = int(args[index])
+        except Exception:
+            return None, f"{fallback_prefix}{args[index]}"
+    return key, mapping.get(key, f"{fallback_prefix}{key}")
+
+
 def _match_effect_handlers(
     line: str,
     variables: dict,
@@ -431,7 +459,7 @@ def _match_effect_handlers(
     skill_delay_accum: dict[str, int],
     sfct_state: dict[str, bool],
 ) -> bool:
-    """通用段/魔法段/物理段 handlers #1-44 (ro_core.py:1144-1857).
+    """通用段/魔法段/物理段/補完解析段 handlers #1-68 (ro_core.py:1144-2350).
 
     Ported top-to-bottom, first-match-wins (mirrors the original's
     `if ... and condition_met: ...; continue` chain — this hook is only
@@ -457,6 +485,17 @@ def _match_effect_handlers(
     `val is None` guard added even though the original has none. Not called
     out per-handler below beyond this note, to avoid repeating the same
     justification ~25 times.
+
+    #45-68 (補完解析段, ro_core.py:1884-2350, Task 9): same "None →
+    UNRECOGNIZED" rule applies throughout. This section additionally ports
+    ro_core.py's own `split_lua_args`/`eval_lua_arg`/`map_int_arg` helpers
+    (now on `lua_expr`, plus this module's `_map_int_arg_with_id` which also
+    surfaces the resolved id for extra={"target_id": ...}) for the handlers
+    whose original regex captured the whole raw args_text into one group
+    instead of one group per argument — ported in that shape for 逐字移植
+    fidelity rather than restructured into #1-44's per-argument-group style.
+    See the section banner comment below for the one sign-inversion quirk
+    (#57 AddRaceTolerace/SubRaceTolerace) and other batch-specific notes.
     """
     # 1. EnableSkill(skill_id, level)
     m = re.match(r"EnableSkill\((\d+),\s*(\d+)\)", line)
@@ -1195,6 +1234,478 @@ def _match_effect_handlers(
         key2 = "無視 全種族 型怪的物理防禦"
         entries_out.append(
             EffectEntry(key=key2, value=100.0, unit="%", kind=KIND_NUMERIC, category=classify_category(key2))
+        )
+        return True
+
+    # =====================================================
+    # 補完解析段 (ro_core.py:1884-2350, Task 9). Unlike #1-44 (which capture
+    # each argument via its own regex group and call lua_expr.safe_eval
+    # directly on it), most of this batch mirrors the ORIGINAL's own code
+    # shape: a single regex group captures the whole raw args_text, which is
+    # then split via lua_expr.split_lua_args and picked apart with
+    # lua_expr.eval_lua_arg / _map_int_arg_with_id (ro_core.py's own
+    # eval_lua_arg/map_int_arg, ported to app/core/lua_expr.py ahead of this
+    # task specifically for this section) — ported this way deliberately for
+    # 逐字移植 fidelity, not simplified into the #1-44 shape, since the
+    # original itself chose this shape for these handlers. A handful (#51/52/
+    # 55/56/58/59/60/66) still used direct per-argument regex groups in the
+    # original and are ported in the #1-44 shape accordingly.
+    #
+    # eval_lua_arg(args, index, default, ...) returns `default` only when
+    # `index` is out of range (argument not supplied) — it returns None when
+    # the argument IS present but lua_expr.safe_eval couldn't resolve it. Both
+    # cases funnel through this same call, so a `val is None` check after
+    # calling it with a non-None default (0) is still exactly the task-7
+    # binding "None → UNRECOGNIZED" guard; it is only skipped for id/name
+    # lookups (_map_int_arg_with_id), which — like the original's
+    # map_int_arg — never fail: they degrade to a fallback_prefix+text/id
+    # string instead, matching ro_core.py:799-809.
+    # =====================================================
+
+    # 45. AddHealValue / SubHealValue(value) — 治癒量 ±N%
+    m = re.match(r"(Add|Sub)HealValue\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        val = lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "治癒量"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 46. AddHealModifyPercent / SubHealModifyPercent(value) — 被治癒量 ±N%
+    m = re.match(r"(Add|Sub)HealModifyPercent\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        val = lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "被治癒量"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 47a/b. (Add|Sub)(HP|SP)drain(rate[, amount]) — single-arg: {pool}吸收
+    # ±N% (one entry); two-arg: {pool}吸收機率 ±N% + {pool}吸收量 ±N% (TWO
+    # entries). Branch on len(args) rather than "amount is None" (which the
+    # original conflates for both "no 2nd arg" and "2nd arg failed to eval")
+    # so a present-but-unresolvable amount correctly becomes its own
+    # UNRECOGNIZED entry instead of silently degrading to single-arg mode.
+    m = re.match(r"(Add|Sub)(HP|SP)drain\s*\((.*)\)\s*$", line)
+    if m:
+        op, pool, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        rate = lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id)
+        if rate is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        if len(args) < 2:
+            key = f"{pool}吸收"
+            entries_out.append(
+                EffectEntry(key=key, value=_signed(rate, op), unit="%", kind=KIND_NUMERIC,
+                            category=classify_category(key))
+            )
+            return True
+        amount = lua_expr.eval_lua_arg(args, 1, None, variables, ctx, slot_id)
+        if amount is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key_rate = f"{pool}吸收機率"
+        key_amount = f"{pool}吸收量"
+        entries_out.append(
+            EffectEntry(key=key_rate, value=_signed(rate, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key_rate))
+        )
+        entries_out.append(
+            EffectEntry(key=key_amount, value=_signed(amount, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key_amount))
+        )
+        return True
+
+    # 48. AddSPconsumption / SubSPconsumption(value) — SP消耗 ±N%
+    m = re.match(r"(Add|Sub)SPconsumption\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        val = lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "SP消耗"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 49. add/subspconsumption(value, skill_id) — LOWERCASE function name in
+    # the original (ro_core.py:1938, deliberately distinct from #48's
+    # Add/SubSPconsumption); re.match is case-sensitive so the two never
+    # collide regardless of dispatch order. 技能【X】SP消耗 ±N%
+    m = re.match(r"(add|sub)spconsumption\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        val = lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        try:
+            skill_id = int(lua_expr.eval_lua_arg(args, 1, 0, variables, ctx, slot_id))
+        except Exception:
+            skill_id = 0
+        skill_name = _skill_name(maps, skill_id)
+        key = f"技能【{skill_name}】SP消耗"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op.capitalize()), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+        )
+        return True
+
+    # 50. AddSkillSP / SubSkillSP(skill_id, value) — 技能【X】SP消耗 ±N (NO %
+    # unit — ro_core.py:1966's f-string has no trailing % unlike #49's).
+    m = re.match(r"(Add|Sub)SkillSP\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        try:
+            skill_id = int(lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id))
+        except Exception:
+            skill_id = 0
+        skill_name = _skill_name(maps, skill_id)
+        val = lua_expr.eval_lua_arg(args, 1, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"技能【{skill_name}】SP消耗"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+        )
+        return True
+
+    # 51. AddMeleeAttackDamage / SubMeleeAttackDamage(0, value_expr) — 受到近距離物理傷害 ±N%
+    m = re.match(r"(Add|Sub)MeleeAttackDamage\(\s*0\s*,\s*(.+)\)", line)
+    if m:
+        op, value_expr = m.groups()
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "受到近距離物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 52. AddRangeAttackDamage / SubRangeAttackDamage(0, value_expr) — 受到遠距離物理傷害 ±N%
+    m = re.match(r"(Add|Sub)RangeAttackDamage\(\s*0\s*,\s*(.+)\)", line)
+    if m:
+        op, value_expr = m.groups()
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "受到遠距離物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 53. AddAttrTolerace / SubAttrTolerace(element, value) — 對{屬性}攻擊抗性 ±N%
+    m = re.match(r"(Add|Sub)AttrTolerace\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        elem_id, elem_name = _map_int_arg_with_id(args, 0, static_maps.ELEMENT_MAP, "屬性", variables, ctx, slot_id)
+        val = lua_expr.eval_lua_arg(args, 1, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {elem_name} 攻擊抗性"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+        )
+        return True
+
+    # 54. add/subattrtolerace(element, value) — LOWERCASE synonym of #53
+    # (ro_core.py:2020); case-sensitive match, never collides with #53.
+    m = re.match(r"(add|sub)attrtolerace\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        elem_id, elem_name = _map_int_arg_with_id(args, 0, static_maps.ELEMENT_MAP, "屬性", variables, ctx, slot_id)
+        val = lua_expr.eval_lua_arg(args, 1, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {elem_name} 攻擊抗性"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op.capitalize()), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+        )
+        return True
+
+    # 55. AddDamage_Size / SubDamage_Size(0, size_id, value_expr) — 受到{體型}敵人的物理傷害 ±N%.
+    # size_map miss fallback f"體型{size_id}" (ro_core.py:2034 — same fallback text as #32).
+    m = re.match(r"(Add|Sub)Damage_Size\(\s*0\s*,\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, size_id, value_expr = m.groups()
+        size_id = int(size_id)
+        size_name = static_maps.SIZE_MAP.get(size_id, f"體型{size_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"受到 {size_name} 敵人的物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "size", "target_id": size_id})
+        )
+        return True
+
+    # 56. AddMDamage_Size / SubMDamage_Size(0, size_id, value_expr) — 受到{體型}敵人的魔法傷害 ±N%.
+    # size_map miss fallback f"尺寸{size_id}" (ro_core.py:2044 — same fallback text as #15,
+    # DIFFERENT from #55's "體型" — the original itself is inconsistent, ported verbatim).
+    m = re.match(r"(Add|Sub)MDamage_Size\(\s*0\s*,\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, size_id, value_expr = m.groups()
+        size_id = int(size_id)
+        size_name = static_maps.SIZE_MAP.get(size_id, f"尺寸{size_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"受到 {size_name} 敵人的魔法傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "size", "target_id": size_id})
+        )
+        return True
+
+    # 57. AddRaceTolerace / SubRaceTolerace(race, value) — 受到{種族}型怪的傷害 ±N%.
+    # SIGN-INVERSION QUIRK (ro_core.py:2059-2060): Tolerace is a *resistance* —
+    # Add(增加耐性) means damage TAKEN goes DOWN ("-"), Sub(減少耐性) means
+    # damage taken goes UP ("+"). This is the OPPOSITE of every Add=+/Sub=-
+    # handler elsewhere in this file (do not reuse `_signed` here). Reproduced
+    # exactly per the original's own comment; not a bug fix candidate.
+    m = re.match(r"(Add|Sub)RaceTolerace\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        race_id, race_name = _map_int_arg_with_id(args, 0, static_maps.RACE_MAP, "種族", variables, ctx, slot_id)
+        val = lua_expr.eval_lua_arg(args, 1, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        signed_val = -val if op == "Add" else val
+        key = f"受到 {race_name} 型怪的傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=signed_val, unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 58. AddDamage_Property / SubDamage_Property(0, elem_id, value_expr) — 受到{屬性}對象的物理傷害 ±N%
+    m = re.match(r"(Add|Sub)Damage_Property\(\s*0\s*,\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, elem_id, value_expr = m.groups()
+        elem_id = int(elem_id)
+        elem_name = static_maps.ELEMENT_MAP.get(elem_id, f"屬性{elem_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"受到 {elem_name} 對象的物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+        )
+        return True
+
+    # 59. AddMDamage_Property / SubMDamage_Property(0, elem_id, value_expr) — 受到{屬性}對象的魔法傷害 ±N%
+    m = re.match(r"(Add|Sub)MDamage_Property\(\s*0\s*,\s*(\d+)\s*,\s*(.+)\s*\)", line)
+    if m:
+        op, elem_id, value_expr = m.groups()
+        elem_id = int(elem_id)
+        elem_name = static_maps.ELEMENT_MAP.get(elem_id, f"屬性{elem_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"受到 {elem_name} 對象的魔法傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+        )
+        return True
+
+    # 60. ClassAddDamage / ClassSubDamage(class_id, 0, value_expr) — 受到{階級}階級的物理傷害 ±N%
+    m = re.match(r"Class(Add|Sub)Damage\(\s*(\d+)\s*,\s*0\s*,\s*(.+?)\s*\)", line)
+    if m:
+        op, class_id, value_expr = m.groups()
+        class_id = int(class_id)
+        class_name = static_maps.CLASS_MAP.get(class_id, f"階級{class_id}")
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"受到 {class_name} 階級的物理傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+        )
+        return True
+
+    # 61. RaceSubDamageSelf / RaceAddDamageSelf(race, value) — 受到{種族}型怪的傷害 ±N%.
+    # Regex alternation order (Sub|Add) matches ro_core.py:2119 verbatim per
+    # task-9 brief instruction — alternation order doesn't change which
+    # literal matches, only documented here for byte-fidelity with the source.
+    m = re.match(r"Race(Sub|Add)DamageSelf\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        race_id, race_name = _map_int_arg_with_id(args, 0, static_maps.RACE_MAP, "種族", variables, ctx, slot_id)
+        val = lua_expr.eval_lua_arg(args, 1, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        signed_val = -val if op == "Sub" else val
+        key = f"受到 {race_name} 型怪的傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=signed_val, unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 62. AddCRIPercent_Race / SubCRIPercent_Race(race, value) — 對{種族}型怪的CRI ±N%
+    m = re.match(r"(Add|Sub)CRIPercent_Race\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        race_id, race_name = _map_int_arg_with_id(args, 0, static_maps.RACE_MAP, "種族", variables, ctx, slot_id)
+        val = lua_expr.eval_lua_arg(args, 1, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"對 {race_name} 型怪的CRI"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+        )
+        return True
+
+    # 63. AddMeleeAttackReflect / SubMeleeAttackReflect(value) — 近距離物理反射 ±N%
+    m = re.match(r"(Add|Sub)MeleeAttackReflect\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        val = lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "近距離物理反射"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 64. AddReflectMagic / SubReflectMagic(value) — 魔法反射 ±N%
+    m = re.match(r"(Add|Sub)ReflectMagic\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        val = lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "魔法反射"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 65. AddReflectTolerace / SubReflectTolerace(value) — 反射傷害耐性 ±N%
+    m = re.match(r"(Add|Sub)ReflectTolerace\s*\((.*)\)\s*$", line)
+    if m:
+        op, args_text = m.groups()
+        args = lua_expr.split_lua_args(args_text)
+        val = lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = "反射傷害耐性"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+        )
+        return True
+
+    # 66. AddDamage_SKID / SubDamage_SKID(0, skill_id, value_expr) — 受到技能【X】傷害 ±N%.
+    # Distinct from #8's AddDamage_SKID(1, ...) (裝備段) — both anchor on the
+    # literal first argument (0 here, 1 for #8), so dispatch order between #8
+    # and #66 doesn't matter (a line can only ever satisfy one of them).
+    m = re.match(r"(Add|Sub)Damage_SKID\(\s*0\s*,\s*(\d+)\s*,\s*(.+)\s*\)\s*$", line)
+    if m:
+        op, skill_id, value_expr = m.groups()
+        skill_id = int(skill_id)
+        skill_name = _skill_name(maps, skill_id)
+        val = lua_expr.safe_eval(value_expr, variables, ctx, slot_id)
+        if val is None:
+            entries_out.append(_unrecognized(line))
+            return True
+        key = f"受到技能【{skill_name}】傷害"
+        entries_out.append(
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
+                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+        )
+        return True
+
+    # 67. plain_effect_map — 8 個無參數旗標，DESCRIPTIVE，key 為
+    # maps.PLAIN_EFFECT_MAP 對應的固定敘述句(不是函式名本身)。原碼
+    # (ro_core.py:2317) 的正則同時容忍可有可無的空括號呼叫
+    # (?:\((.*)\))? — 括號內容從未被使用，照樣不使用。
+    m = re.match(
+        r"(NoDispell|Magicimmune|NoJamstone|NoMadogearfuel|AddNeverknockback|Clairvoyance|Reincarnation|SplashAttack)"
+        r"\s*(?:\((.*)\))?\s*$",
+        line,
+    )
+    if m:
+        func_name = m.group(1)
+        key = static_maps.PLAIN_EFFECT_MAP.get(func_name, func_name)
+        entries_out.append(
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER)
+        )
+        return True
+
+    # 68. Condition(status_id, duration, chance) — 賦予狀態：{status}，kind=PROC.
+    # status_map 只認 5 種 ID(13/14/15/21/26)；miss fallback f"狀態ID {id}"
+    # (ro_core.py:2341)。status_id 求值失敗時比照原碼 try/except 退回 0 —
+    # 這是原碼對這個欄位自己內建的防呆(ro_core.py:2337-2340)，不屬於本port一般
+    # 「None→UNRECOGNIZED」規則管轄範圍；退回的 0 一樣正常落 miss fallback
+    # "狀態ID 0"，不算UNRECOGNIZED。duration/chance 求值不到時維持 None(原碼
+    # eval_lua_arg對「缺該參數」與「該參數求值失敗」本就不區分，兩者皆落None，
+    # 照搬)。`if args:`（非`is not None`）比照原碼 ro_core.py:2329 的truthy檢查
+    # ——「Condition()」零參數會是空list、真值False，不會走這條分支。
+    args = lua_expr.get_lua_call_args("Condition", line)
+    if args:
+        try:
+            status_id = int(lua_expr.eval_lua_arg(args, 0, 0, variables, ctx, slot_id))
+        except Exception:
+            status_id = 0
+        status_name = static_maps.STATUS_MAP.get(status_id, f"狀態ID {status_id}")
+        duration = lua_expr.eval_lua_arg(args, 1, None, variables, ctx, slot_id)
+        chance = lua_expr.eval_lua_arg(args, 2, None, variables, ctx, slot_id)
+        key = f"賦予狀態：{status_name}"
+        entries_out.append(
+            EffectEntry(key=key, value=None, unit="", kind=KIND_PROC, category=CAT_OTHER,
+                        extra={"status": status_name, "duration": duration, "chance": chance})
         )
         return True
 
