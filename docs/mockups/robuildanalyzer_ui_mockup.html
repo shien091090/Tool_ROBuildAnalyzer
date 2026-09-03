@@ -1,0 +1,760 @@
+<title>ROBuildAnalyzer 介面草案</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#14161c; --panel:#1c1f27; --raised:#242833; --line:#333845;
+  --text:#e2e6ef; --muted:#8b93a5; --dim:#5c6373;
+  --gold:#d9a84e; --gold-dim:#8a6c33;
+  --combo:#4ec9b0;
+  --good:#6fbf73; --bad:#d97c7c; --warn:#d9b84e;
+  --mono:"JetBrains Mono",Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;
+  font-size:13px; line-height:1.5; margin:0; padding:0 0 40px;
+}
+.num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+
+/* ===== 頂部列 ===== */
+.appbar{
+  display:flex; align-items:center; gap:16px;
+  background:var(--panel); border-bottom:1px solid var(--line);
+  padding:10px 18px; flex-wrap:wrap;
+}
+.appbar .logo{font-weight:700; font-size:15px; letter-spacing:.5px}
+.appbar .logo em{color:var(--gold); font-style:normal}
+.field{display:flex; align-items:center; gap:6px}
+.field label{color:var(--muted); font-size:12px}
+select,.btn{
+  background:var(--raised); color:var(--text); border:1px solid var(--line);
+  border-radius:4px; padding:4px 10px; font-size:12.5px; font-family:inherit; cursor:pointer;
+}
+.btn:hover,select:hover{border-color:var(--gold-dim)}
+.btn:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--gold); outline-offset:1px}
+.datastate{margin-left:auto; color:var(--muted); font-size:12px; display:flex; align-items:center; gap:10px}
+.datastate .dot{width:7px;height:7px;border-radius:50%;background:var(--good);display:inline-block;margin-right:5px}
+
+/* ===== 主版面 ===== */
+.layout{
+  display:grid; grid-template-columns:minmax(640px,47%) 1fr;
+  gap:14px; padding:14px 18px; align-items:start;
+}
+@media (max-width:1200px){ .layout{grid-template-columns:1fr} }
+
+/* ===== 配裝面板 ===== */
+.builds{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.build{
+  background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden;
+}
+.build-head{
+  display:flex; align-items:center; gap:8px;
+  padding:9px 12px; border-bottom:1px solid var(--line); background:var(--raised);
+}
+.build-head .tag{
+  font-family:var(--mono); font-weight:600; font-size:12px;
+  border-radius:3px; padding:1px 7px;
+}
+.build.a .tag{background:#2a3a4a; color:#7ec3e8}
+.build.b .tag{background:#3a2a44; color:#cf9ee8}
+.build-head select{flex:1; min-width:0}
+.iconbtn{background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:2px 4px}
+.iconbtn:hover{color:var(--gold)}
+
+.slots{padding:8px 10px 12px; display:flex; flex-direction:column; gap:5px}
+.sechead{
+  font-size:10.5px; color:var(--dim); letter-spacing:2px; margin:7px 2px 1px;
+  display:flex; align-items:center; gap:8px;
+}
+.sechead::after{content:""; flex:1; height:1px; background:var(--line)}
+
+.slot{
+  background:var(--raised); border:1px solid var(--line); border-radius:6px;
+  padding:5px 9px 6px; transition:border-color .12s, box-shadow .12s;
+}
+.slot .part{font-size:10.5px; color:var(--dim); letter-spacing:1px; margin-bottom:1px}
+.slot .gearline{display:flex; align-items:center; gap:6px; cursor:pointer; flex-wrap:wrap}
+.slot .gearline:hover .gname{color:var(--gold)}
+.refine{font-family:var(--mono); color:var(--gold); font-weight:600; font-size:12px}
+.grade{
+  font-family:var(--mono); font-size:10.5px; font-weight:600;
+  border:1px solid var(--gold-dim); color:var(--gold); border-radius:3px; padding:0 4px;
+}
+.gname{font-weight:500}
+.gname.empty{color:var(--dim); font-weight:400}
+.chips{display:flex; flex-wrap:wrap; gap:4px; margin-top:4px}
+.chip{
+  font-size:11px; border-radius:3px; padding:1px 7px; cursor:pointer;
+  background:#1a2030; border:1px solid #2c3850; color:#a8c0e0;
+  transition:border-color .12s, box-shadow .12s;
+}
+.chip:hover{border-color:#5580b0}
+.chip.enchant{background:#241f30; border-color:#453860; color:#c8b4e8}
+.chip.enchant:hover{border-color:#8a6cc0}
+.chip.stone{background:#2b2418; border-color:#4d3f22; color:#dcc084}
+.chip.stone:hover{border-color:#8a6c33}
+.chip.empty{background:none; border-style:dashed; color:var(--dim)}
+
+/* 套裝/套卡 hover 高亮 */
+[data-combo]{cursor:pointer}
+.combo-hl{
+  border-color:var(--combo) !important;
+  box-shadow:0 0 0 1px var(--combo), 0 0 10px rgba(78,201,176,.35);
+}
+.slot.combo-hl{background:#1d2a28}
+
+/* ===== 右側結果區 ===== */
+.results{background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden}
+.tabs{display:flex; border-bottom:1px solid var(--line); background:var(--raised)}
+.tab{
+  padding:10px 22px; cursor:pointer; border:none; background:none;
+  color:var(--muted); font-size:13.5px; font-family:inherit; font-weight:500;
+  border-bottom:2px solid transparent;
+}
+.tab.on{color:var(--gold); border-bottom-color:var(--gold)}
+.tabbody{padding:14px 16px; display:none}
+.tabbody.on{display:block}
+
+table.cmp{width:100%; border-collapse:collapse}
+table.cmp th{
+  text-align:left; color:var(--muted); font-weight:500; font-size:12px;
+  padding:5px 10px; border-bottom:1px solid var(--line);
+}
+table.cmp th.v,table.cmp td.v{text-align:right; width:110px}
+table.cmp td{padding:5px 10px; border-bottom:1px solid #23262f}
+table.cmp td.v{font-family:var(--mono); font-size:12.5px}
+td.v.win{color:var(--good); font-weight:600}
+td.v.none{color:var(--dim)}
+.grp td{
+  color:var(--dim); font-size:11px; letter-spacing:1.5px; padding-top:12px;
+  border-bottom:1px solid var(--line);
+}
+
+.uncounted{
+  margin-top:16px; border:1px solid #4a4230; border-radius:6px; background:#1e1c16;
+  padding:10px 13px;
+}
+.uncounted h4{margin:0 0 7px; font-size:12.5px; color:var(--warn); font-weight:600}
+.unc-item{
+  display:flex; align-items:baseline; gap:8px; padding:4px 0; font-size:12.5px;
+  border-top:1px dashed #3a3626; flex-wrap:wrap;
+}
+.unc-item:first-of-type{border-top:none}
+.unc-item .src{color:var(--muted); white-space:nowrap}
+.unc-item code{font-family:var(--mono); font-size:11.5px; color:#c9b98a; background:#262218; padding:0 5px; border-radius:3px}
+.unc-item .lack{color:var(--dim); font-size:11.5px}
+.fixbtn{
+  background:none; border:1px solid var(--gold-dim); color:var(--gold);
+  border-radius:3px; font-size:11px; padding:1px 8px; cursor:pointer; font-family:inherit;
+}
+.fixbtn:hover{background:#2a2415}
+
+/* ===== 成本頁 ===== */
+.cost-summary{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px}
+.cost-card{border:1px solid var(--line); border-radius:6px; padding:10px 14px; background:var(--raised)}
+.cost-card .lbl{color:var(--muted); font-size:11.5px; margin-bottom:2px}
+.cost-card .total{font-family:var(--mono); font-size:19px; font-weight:600}
+.cost-card.a .total{color:#7ec3e8}
+.cost-card.b .total{color:#cf9ee8}
+.cost-card .sub{color:var(--muted); font-size:11.5px; margin-top:2px}
+
+table.cost{width:100%; border-collapse:collapse; margin-bottom:4px}
+table.cost th{
+  text-align:left; color:var(--muted); font-weight:500; font-size:11.5px;
+  padding:4px 8px; border-bottom:1px solid var(--line);
+}
+table.cost td{padding:4px 8px; border-bottom:1px solid #23262f; font-size:12.5px; vertical-align:top}
+table.cost td.r,table.cost th.r{text-align:right; font-family:var(--mono); white-space:nowrap}
+.path{color:var(--muted); font-size:11.5px}
+.expander{cursor:pointer; color:var(--gold)}
+.detail{
+  background:#191c23; border-radius:4px; margin:2px 0 6px; padding:8px 12px;
+  font-size:12px; color:var(--muted);
+}
+.detail b{color:var(--text); font-weight:500}
+.detail .mono{font-family:var(--mono); font-size:11.5px}
+.detail .cols{display:grid; grid-template-columns:1fr 1fr; gap:4px 20px; margin-top:4px}
+
+/* ===== 選擇清單 modal ===== */
+.overlay{
+  position:fixed; inset:0; background:rgba(8,10,14,.65); z-index:50;
+  display:flex; align-items:center; justify-content:center;
+}
+.picker{
+  width:430px; max-height:74vh; background:var(--panel); border:1px solid var(--line);
+  border-radius:8px; display:flex; flex-direction:column; box-shadow:0 12px 40px rgba(0,0,0,.5);
+}
+.picker header{padding:11px 14px 8px; border-bottom:1px solid var(--line)}
+.picker header h3{margin:0 0 2px; font-size:14px}
+.picker header .filter-note{
+  font-size:11.5px; color:var(--gold); background:#2a2415; border-radius:3px;
+  display:inline-block; padding:0 7px; margin-top:3px;
+}
+.searchrow{padding:9px 14px; border-bottom:1px solid var(--line)}
+.searchrow input{
+  width:100%; background:var(--raised); border:1px solid var(--line); border-radius:4px;
+  color:var(--text); padding:6px 10px; font-size:13px; font-family:inherit;
+}
+.plist{overflow-y:auto; padding:5px 0}
+.pitem{display:flex; align-items:center; gap:9px; padding:6px 14px; cursor:pointer}
+.pitem:hover{background:var(--raised)}
+.pitem .nm{flex:1}
+.pitem .rate{font-family:var(--mono); font-size:11.5px; color:var(--gold); white-space:nowrap}
+.picker footer{
+  padding:8px 14px; border-top:1px solid var(--line); color:var(--dim); font-size:11.5px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+
+/* ===== 道具tooltip ===== */
+#tooltip{
+  position:fixed; z-index:99; max-width:340px; pointer-events:none;
+  background:#0e1116; border:1px solid var(--gold-dim); border-radius:5px;
+  padding:9px 12px; font-size:12px; line-height:1.55;
+  box-shadow:0 8px 24px rgba(0,0,0,.6);
+}
+#tooltip .tname{color:var(--gold); font-weight:600; margin-bottom:4px}
+#tooltip .tdesc{color:#c8cdd8; white-space:pre-line}
+#tooltip .tfoot{color:var(--dim); font-size:11px; margin-top:5px; border-top:1px solid #262b36; padding-top:4px}
+
+/* ===== 說明區 ===== */
+.legend{
+  margin:4px 18px; padding:10px 14px; border:1px dashed var(--line); border-radius:6px;
+  color:var(--muted); font-size:12px; display:flex; gap:24px; flex-wrap:wrap;
+}
+.legend .glow{
+  display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:middle; margin-right:6px;
+  border:1px solid var(--combo); box-shadow:0 0 6px rgba(78,201,176,.5);
+}
+.hint{color:var(--dim)}
+</style>
+
+<div class="appbar">
+  <span class="logo">RO <em>Build</em> Analyzer</span>
+  <span class="field"><label>角色檔</label>
+    <select><option>主帳PD (獵影士 Lv260/55)</option><option>二帳補師</option><option>+ 新增角色檔…</option></select>
+  </span>
+  <span class="datastate">
+    <span><span class="dot"></span>資料: 2026-08-24 匯入 (DRO data.grf)</span>
+    <button class="btn">重新匯入</button>
+  </span>
+</div>
+
+<div class="layout">
+  <!-- ============ 左: 兩組配裝 ============ -->
+  <div class="builds">
+
+    <!-- 配裝 A -->
+    <div class="build a">
+      <div class="build-head">
+        <span class="tag">A</span>
+        <select><option>PD向物理配置</option><option>移速跑圖裝</option><option>MD週回裝</option></select>
+        <button class="iconbtn" title="儲存">💾</button>
+        <button class="iconbtn" title="另存新檔">📄</button>
+      </div>
+      <div class="slots">
+        <div class="sechead">一般裝備</div>
+
+        <div class="slot">
+          <div class="part">上段頭飾</div>
+          <div class="gearline"><span class="refine">+9</span><span class="gname">熾天使花冠</span></div>
+          <!-- 有1洞+可附魔: 兩種chip都有 -->
+          <div class="chips">
+            <span class="chip">深淵騎士卡片</span>
+            <span class="chip enchant">魔力Lv4</span><span class="chip enchant">致命Lv2</span>
+          </div>
+        </div>
+
+        <div class="slot">
+          <div class="part">中段頭飾</div>
+          <!-- 無洞+不可附魔: 完全不顯示chip列 -->
+          <div class="gearline"><span class="gname">烏鴉天狗面具</span></div>
+        </div>
+
+        <div class="slot">
+          <div class="part">下段頭飾</div>
+          <div class="gearline"><span class="gname empty">— 未裝備(點擊選擇)</span></div>
+        </div>
+
+        <div class="slot" data-combo="setA1">
+          <div class="part">鎧甲</div>
+          <div class="gearline"><span class="refine">+13</span><span class="grade">A</span><span class="gname">月全蝕魔力外袍-LT</span></div>
+          <div class="chips">
+            <span class="chip">熾焰龍卡片</span>
+            <span class="chip enchant" onclick="openPicker('enchant')">威力星團Lv3</span>
+            <span class="chip enchant">狼王寶珠STR2</span>
+            <span class="chip enchant empty">+ 附魔</span>
+          </div>
+        </div>
+
+        <div class="slot">
+          <div class="part">武器</div>
+          <div class="gearline" onclick="openPicker('weapon')"><span class="refine">+11</span><span class="grade">B</span><span class="gname">狂怒暗氣刀-LT</span></div>
+          <!-- 有洞可插卡, 但此裝備不可附魔: 只顯示+卡片 -->
+          <div class="chips">
+            <span class="chip" data-combo="cardA1">白騎士卡片</span>
+            <span class="chip empty" onclick="openPicker('wcard')">+ 卡片</span>
+          </div>
+        </div>
+
+        <div class="slot">
+          <div class="part">盾牌</div>
+          <div class="gearline"><span class="refine">+9</span><span class="gname">吞神魔盾-闇嗜-LT</span></div>
+          <!-- 有洞+可附魔 -->
+          <div class="chips">
+            <span class="chip" data-combo="cardA1">深淵漫遊者卡片</span>
+            <span class="chip enchant empty">+ 附魔</span>
+          </div>
+        </div>
+
+        <div class="slot">
+          <div class="part">披肩</div>
+          <div class="gearline"><span class="refine">+11</span><span class="gname">特利斯坦王國斗篷-LT</span></div>
+          <div class="chips"><span class="chip">波利之王卡片</span><span class="chip enchant">完全迴避Lv3</span></div>
+        </div>
+
+        <div class="slot" data-combo="setA1">
+          <div class="part">鞋子</div>
+          <div class="gearline"><span class="refine">+13</span><span class="grade">A</span><span class="gname">阿斯特莉亞靴-LT</span></div>
+          <div class="chips"><span class="chip empty">+ 卡片</span><span class="chip enchant">耐力星團Lv2</span></div>
+        </div>
+
+        <div class="slot">
+          <div class="part">飾品 (右)</div>
+          <div class="gearline"><span class="gname">賭徒之印</span></div>
+          <!-- 無洞但可附魔(舊式): 只顯示+附魔 -->
+          <div class="chips"><span class="chip enchant empty">+ 附魔</span></div>
+        </div>
+
+        <div class="slot">
+          <div class="part">飾品 (左)</div>
+          <div class="gearline"><span class="gname">霸肋門德深層能量戒指</span></div>
+          <div class="chips"><span class="chip empty">+ 卡片</span></div>
+        </div>
+
+        <div class="sechead">服飾</div>
+
+        <div class="slot">
+          <div class="part">服飾上段</div>
+          <div class="gearline"><span class="gname">飄浮的貓耳</span></div>
+          <div class="chips"><span class="chip stone" onclick="openPicker('stone')">服飾強化石(上段ATK)</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">服飾中段</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">服飾下段</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">服飾背飾</div>
+          <div class="gearline"><span class="gname">燦爛妖精之翼</span></div>
+          <div class="chips"><span class="chip stone empty" onclick="openPicker('stone')">+ 強化石</span></div>
+        </div>
+
+        <div class="sechead">影子裝備</div>
+
+        <div class="slot">
+          <div class="part">影子武器</div>
+          <div class="gearline"><span class="refine">+9</span><span class="gname">獵影士之影武器</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">影子盾牌</div>
+          <div class="gearline"><span class="refine">+9</span><span class="gname">獵影士之影盾牌</span></div>
+        </div>
+        <div class="slot" data-combo="setA2">
+          <div class="part">影子鎧甲</div>
+          <div class="gearline"><span class="refine">+7</span><span class="gname">力量之影鎧甲</span></div>
+        </div>
+        <div class="slot" data-combo="setA2">
+          <div class="part">影子鞋子</div>
+          <div class="gearline"><span class="refine">+7</span><span class="gname">力量之影鞋子</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">影子耳環</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">影子墜飾</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 配裝 B -->
+    <div class="build b">
+      <div class="build-head">
+        <span class="tag">B</span>
+        <select><option>爆擊流測試</option><option>PD向物理配置</option></select>
+        <button class="iconbtn" title="儲存">💾</button>
+        <button class="iconbtn" title="另存新檔">📄</button>
+      </div>
+      <div class="slots">
+        <div class="sechead">一般裝備</div>
+
+        <div class="slot">
+          <div class="part">上段頭飾</div>
+          <div class="gearline"><span class="refine">+11</span><span class="gname">女王甲蟲頭盔</span></div>
+          <div class="chips"><span class="chip">頑強鯨魚卡片</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">中段頭飾</div>
+          <div class="gearline"><span class="gname">柯杜威之耳</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">下段頭飾</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">鎧甲</div>
+          <div class="gearline"><span class="refine">+11</span><span class="gname">粗暴者龍影鎧甲-LT</span></div>
+          <div class="chips">
+            <span class="chip">熾焰龍卡片</span>
+            <span class="chip enchant">爆擊星團Lv3</span><span class="chip enchant">狼王寶珠LUK2</span>
+          </div>
+        </div>
+        <div class="slot">
+          <div class="part">武器</div>
+          <div class="gearline"><span class="refine">+13</span><span class="grade">A</span><span class="gname">神龍爆擊爪-LT</span></div>
+          <div class="chips"><span class="chip">白騎士卡片</span><span class="chip">獵豹卡片</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">盾牌</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot" data-combo="setB1">
+          <div class="part">披肩</div>
+          <div class="gearline"><span class="refine">+9</span><span class="gname">夜勝魔復仇斗篷-LT</span></div>
+          <div class="chips"><span class="chip">深淵漫遊者卡片</span><span class="chip enchant">完全迴避Lv2</span></div>
+        </div>
+        <div class="slot" data-combo="setB1">
+          <div class="part">鞋子</div>
+          <div class="gearline"><span class="refine">+9</span><span class="gname">神龍戰靴-LT</span></div>
+          <div class="chips"><span class="chip empty">+ 卡片</span><span class="chip enchant">專注星團Lv1</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">飾品 (右)</div>
+          <div class="gearline"><span class="gname">生物圈深淵戒指</span></div>
+          <div class="chips"><span class="chip">幽靈船長卡片</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">飾品 (左)</div>
+          <div class="gearline"><span class="gname">賭徒之印</span></div>
+          <div class="chips"><span class="chip enchant empty">+ 附魔</span></div>
+        </div>
+
+        <div class="sechead">服飾</div>
+        <div class="slot">
+          <div class="part">服飾上段</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">服飾中段</div>
+          <div class="gearline"><span class="gname">閃亮亮眼鏡</span></div>
+          <div class="chips"><span class="chip stone empty" onclick="openPicker('stone')">+ 強化石</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">服飾下段</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">服飾背飾</div>
+          <div class="gearline"><span class="gname">宇宙星辰披風</span></div>
+          <div class="chips"><span class="chip stone">服飾強化石(背飾CRI)</span></div>
+        </div>
+
+        <div class="sechead">影子裝備</div>
+        <div class="slot">
+          <div class="part">影子武器</div>
+          <div class="gearline"><span class="refine">+9</span><span class="gname">爆擊之影武器</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">影子盾牌</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">影子鎧甲</div>
+          <div class="gearline"><span class="refine">+7</span><span class="gname">迅捷之影鎧甲</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">影子鞋子</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">影子耳環</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+        <div class="slot">
+          <div class="part">影子墜飾</div>
+          <div class="gearline"><span class="gname empty">— 未裝備</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 右: 結果頁籤 ============ -->
+  <div class="results">
+    <div class="tabs">
+      <button class="tab on" onclick="switchTab(this,'effects')">效果結算</button>
+      <button class="tab" onclick="switchTab(this,'cost')">成本估算</button>
+    </div>
+
+    <!-- 效果結算 -->
+    <div class="tabbody on" id="tab-effects">
+      <table class="cmp">
+        <tr><th>效果</th><th class="v">配裝A</th><th class="v">配裝B</th></tr>
+        <tr class="grp"><td colspan="3">基礎素質</td></tr>
+        <tr><td>STR</td><td class="v win">+18</td><td class="v">+6</td></tr>
+        <tr><td>LUK</td><td class="v">+5</td><td class="v win">+21</td></tr>
+        <tr><td>POW</td><td class="v win">+14</td><td class="v">+9</td></tr>
+        <tr><td>MaxHP</td><td class="v">+15%</td><td class="v">+15%</td></tr>
+        <tr class="grp"><td colspan="3">物理系</td></tr>
+        <tr><td>ATK</td><td class="v win">+145</td><td class="v">+118</td></tr>
+        <tr><td>P.ATK</td><td class="v win">+11</td><td class="v">+8</td></tr>
+        <tr><td>物理傷害(全體型態)</td><td class="v win">+12%</td><td class="v">+8%</td></tr>
+        <tr><td>近距離物理傷害</td><td class="v win">+20%</td><td class="v">+14%</td></tr>
+        <tr><td>爆擊傷害</td><td class="v">+45%</td><td class="v win">+82%</td></tr>
+        <tr><td>CRI</td><td class="v">+7</td><td class="v win">+38</td></tr>
+        <tr><td>無屬性魔物傷害</td><td class="v win">+15%</td><td class="v none">—</td></tr>
+        <tr class="grp"><td colspan="3">詠唱 / 冷卻</td></tr>
+        <tr><td>變動詠唱時間</td><td class="v none">—</td><td class="v win">-15%</td></tr>
+        <tr><td>技能「殞星擊」冷卻</td><td class="v win">-2.00秒</td><td class="v none">—</td></tr>
+        <tr class="grp"><td colspan="3">減傷 / 迴避</td></tr>
+        <tr><td>完全迴避</td><td class="v win">+13</td><td class="v">+8</td></tr>
+        <tr><td>對玩家型態減傷</td><td class="v win">+10%</td><td class="v none">—</td></tr>
+      </table>
+
+      <div class="uncounted">
+        <h4>⚠ 未計入的條件效果 (3)</h4>
+        <div class="unc-item">
+          <span class="src">A・月全蝕魔力外袍-LT</span>
+          <code>if GetSkillLevel(5015)&gt;0 → 魔法傷害+10%</code>
+          <span class="lack">缺: 技能「暴風雪之刃」等級</span>
+          <button class="fixbtn">補進角色檔</button>
+        </div>
+        <div class="unc-item">
+          <span class="src">A・白騎士卡片</span>
+          <code>if base_LUK&gt;=120 → 爆擊傷害+8%</code>
+          <span class="lack">角色LUK=30, 條件不成立(已判定)</span>
+        </div>
+        <div class="unc-item">
+          <span class="src">B・神龍爆擊爪-LT</span>
+          <code>if GetSkillLevel(5231)&gt;=7 → CRI+15</code>
+          <span class="lack">缺: 技能「龍之意志」等級</span>
+          <button class="fixbtn">補進角色檔</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 成本估算 -->
+    <div class="tabbody" id="tab-cost">
+      <div class="cost-summary">
+        <div class="cost-card a">
+          <div class="lbl">配裝A 期望總成本</div>
+          <div class="total">512,340,285 <span style="font-size:12px">Zeny</span></div>
+          <div class="sub">本體消耗合計: 4.45件 (含精煉失敗重購)</div>
+        </div>
+        <div class="cost-card b">
+          <div class="lbl">配裝B 期望總成本</div>
+          <div class="total">287,655,900 <span style="font-size:12px">Zeny</span></div>
+          <div class="sub">本體消耗合計: 3.18件</div>
+        </div>
+      </div>
+
+      <table class="cost">
+        <tr><th>配裝A・部位</th><th>養成路徑</th><th class="r">期望Zeny</th><th class="r">本體</th></tr>
+        <tr>
+          <td><span class="expander" onclick="toggleDetail()">▾</span> 鎧甲 月全蝕魔力外袍-LT</td>
+          <td class="path">無階+0 → A階+13</td>
+          <td class="r">350,978,060</td><td class="r">1.00件</td>
+        </tr>
+        <tr id="detailRow"><td colspan="4">
+          <div class="detail">
+            <b>直接消耗(合成品層)</b>
+            <div class="cols mono">
+              <span>乙太鋁 x3.21</span><span>濃縮乙太鋁 x19.58</span>
+              <span>高濃縮乙太鋁 x20.00</span><span>鐵匠的祝福 x332.50</span>
+              <span>乙太天藍寶石 x7.14</span><span>乙太黃寶石 x8.33</span>
+              <span>乙太紫寶石 x10.00</span><span>乙太琥珀 x25.00</span>
+            </div>
+            <b style="display:block;margin-top:8px">基礎材料攤開</b>
+            <div class="cols mono">
+              <span>乙太星塵 x3,083.97</span><span>乙太魔石 x546.43 (中間合成)</span>
+              <span>濃縮鋁 x97.88 → 14,682,540z</span><span>高濃縮鋁 x46.67 → 8,050,000z</span>
+              <span>鐵匠的祝福 → 241,062,500z</span><span>兌換手續費 → 76,975,397z</span>
+              <span>升階手續費 → 10,005,952z</span><span>寶石類 → 201,671z</span>
+            </div>
+          </div>
+        </td></tr>
+        <tr>
+          <td><span class="expander">▸</span> 鎧甲附魔 slot1 威力星團Lv3</td>
+          <td class="path">機率0.4% → 期望250輪 (策略: 只看最後格)</td>
+          <td class="r">88,214,000</td><td class="r">—</td>
+        </tr>
+        <tr>
+          <td><span class="expander">▸</span> 武器 狂怒暗氣刀-LT</td>
+          <td class="path">+0 → B階+11</td>
+          <td class="r">64,520,750</td><td class="r">2.27件</td>
+        </tr>
+        <tr>
+          <td><span class="expander">▸</span> 鞋子 阿斯特莉亞靴-LT</td>
+          <td class="path">無階+0 → A階+13</td>
+          <td class="r">350,978,060 <span style="color:var(--dim)">…</span></td><td class="r">1.00件</td>
+        </tr>
+        <tr>
+          <td>上段附魔 slot2-3</td>
+          <td class="path">魔力Lv4(1.2%) 中途可停</td>
+          <td class="r">8,110,400</td><td class="r">—</td>
+        </tr>
+        <tr>
+          <td style="color:var(--dim)">飾品 賭徒之印 附魔</td>
+          <td class="path" style="color:var(--warn)">舊式NPC附魔 — 未建檔, 不計入</td>
+          <td class="r" style="color:var(--dim)">—</td><td class="r" style="color:var(--dim)">—</td>
+        </tr>
+      </table>
+      <div class="hint" style="padding:4px 8px">配裝B 明細同格式, 略。材料單價來源: userdata/prices.json (最後更新 2026-08-31)</div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <span><span class="glow"></span>套裝/套卡關聯: 鼠標移到裝備或卡片上, 同組物件一起亮起 (試試A的鎧甲/鞋子、武器卡/盾牌卡、影子鎧甲/影子鞋子)</span>
+  <span class="hint">「+ 卡片」只在裝備有洞時顯示 /「+ 附魔」只在可附魔時顯示</span>
+  <span class="hint">清單內鼠標移到道具上顯示完整敘述tooltip</span>
+  <span class="hint">畫面資料皆為示意用假資料</span>
+</div>
+
+<!-- ===== 選擇清單 modal ===== -->
+<div class="overlay" id="overlay" hidden onclick="if(event.target===this)closePicker()">
+  <div class="picker">
+    <header>
+      <h3 id="pkTitle">選擇裝備</h3>
+      <span class="filter-note" id="pkNote"></span>
+    </header>
+    <div class="searchrow">
+      <input id="pkSearch" placeholder="搜尋名稱…" oninput="filterList()">
+    </div>
+    <div class="plist" id="pkList"></div>
+    <footer><span id="pkCount"></span><button class="btn" onclick="closePicker()">關閉 (Esc)</button></footer>
+  </div>
+</div>
+
+<div id="tooltip" hidden></div>
+
+<script>
+/* ---------- 頁籤 ---------- */
+function switchTab(btn, name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  document.querySelectorAll('.tabbody').forEach(t=>t.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('tab-'+name).classList.add('on');
+}
+
+/* ---------- 成本明細展開 ---------- */
+function toggleDetail(){
+  const r=document.getElementById('detailRow');
+  r.hidden=!r.hidden;
+}
+
+/* ---------- 套裝/套卡 hover 高亮 ---------- */
+document.querySelectorAll('[data-combo]').forEach(el=>{
+  el.addEventListener('mouseenter',()=>{
+    document.querySelectorAll(`[data-combo="${el.dataset.combo}"]`)
+      .forEach(m=>m.classList.add('combo-hl'));
+  });
+  el.addEventListener('mouseleave',()=>{
+    document.querySelectorAll('.combo-hl').forEach(m=>m.classList.remove('combo-hl'));
+  });
+});
+
+/* ---------- 選擇清單 ---------- */
+const PICKS={
+  weapon:{
+    title:'選擇裝備 — 武器', note:'清單僅顯示: 武器 (拳刃, 依角色職業過濾)',
+    items:[
+      {nm:'狂怒暗氣刀-LT', desc:'ATK 265・武器等級5・重量120\n物理傷害+15%, 精煉每+1追加近距離物理傷害+2%。\n精煉+11以上時, 技能「暗影斬」冷卻-1秒。\n─────────────\n系列: 拳刃\n屬性: 無\n要求: Lv230 獵影士', foot:'可精煉・可升階・洞數1'},
+      {nm:'神龍爆擊爪-LT', desc:'ATK 245・武器等級5・重量100\nCRI+15, 爆擊傷害+20%。\n裝備者BaseLv每10級, 爆擊傷害追加+1%。\n─────────────\n系列: 拳刃\n屬性: 無\n要求: Lv230 獵影士', foot:'可精煉・可升階・洞數2'},
+      {nm:'深淵尖爪-OS', desc:'ATK 220・武器等級4・重量90\n近距離物理傷害+10%。\n精煉+9以上時, ASPD+1。\n─────────────\n系列: 拳刃\n屬性: 無\n要求: Lv200 全職業(除初心者)', foot:'可精煉・洞數2'},
+      {nm:'時光超越者之爪', desc:'ATK 210・武器等級4・重量80\nPOW+5, 攻擊速度+10%。\n─────────────\n系列: 拳刃\n屬性: 無\n要求: Lv200', foot:'可精煉・洞數1'},
+      {nm:'隕星拳套', desc:'ATK 195・武器等級4・重量110\n對中大型魔物傷害+15%。\n─────────────\n系列: 拳刃\n屬性: 無\n要求: Lv190', foot:'可精煉・洞數2'},
+      {nm:'黯淡冰晶鉤爪', desc:'ATK 180・武器等級4・重量95\n水屬性物理傷害+10%。\n─────────────\n系列: 拳刃\n屬性: 水\n要求: Lv170', foot:'可精煉・洞數1'},
+    ]},
+  wcard:{
+    title:'選擇卡片 — 武器', note:'清單僅顯示: 武器部位卡片',
+    items:[
+      {nm:'白騎士卡片', desc:'對中型、大型魔物物理傷害+15%。\nbase_LUK 120以上時, 追加爆擊傷害+8%。\n─────────────\n系列: 卡片\n裝備位置: 武器', foot:'插入後不可取出(示意)'},
+      {nm:'獵豹卡片', desc:'CRI+7。\n與獵鷹卡片同時裝備時, 爆擊傷害+10%。\n─────────────\n系列: 卡片\n裝備位置: 武器', foot:'套卡: 獵鷹卡片'},
+      {nm:'豬草泥馬卡片', desc:'ATK+10。\n精煉每+2, ATK追加+2。\n─────────────\n系列: 卡片\n裝備位置: 武器', foot:''},
+      {nm:'深海魷魚王卡片', desc:'水屬性魔法傷害+20%。\n─────────────\n系列: 卡片\n裝備位置: 武器', foot:''},
+      {nm:'金烏鴉卡片', desc:'遠距離物理傷害+10%。\n─────────────\n系列: 卡片\n裝備位置: 武器', foot:''},
+    ]},
+  enchant:{
+    title:'選擇附魔 — 月全蝕魔力外袍-LT・slot1', note:'詞條池: 星團系列 (機率為該槽實際權重換算)',
+    items:[
+      {nm:'威力星團Lv1', rate:'13.60%', desc:'P.ATK+1。\n裝備精煉+11以上時, 追加ATK+15。\n─────────────\n系列: 附魔詞條'},
+      {nm:'耐力星團Lv1', rate:'13.60%', desc:'RES+7。\n─────────────\n系列: 附魔詞條'},
+      {nm:'專注星團Lv1', rate:'13.60%', desc:'HIT+15。\n─────────────\n系列: 附魔詞條'},
+      {nm:'威力星團Lv2', rate:'2.50%', desc:'P.ATK+2。\n裝備精煉+11以上時, 追加ATK+30。\n─────────────\n系列: 附魔詞條'},
+      {nm:'耐力星團Lv2', rate:'2.50%', desc:'RES+14。\n─────────────\n系列: 附魔詞條'},
+      {nm:'威力星團Lv3', rate:'0.40%', desc:'P.ATK+3, ATK+3%。\n裝備精煉+13以上時, 追加物理傷害+5%。\n─────────────\n系列: 附魔詞條'},
+      {nm:'耐力星團Lv3', rate:'0.40%', desc:'RES+21, MaxHP+5%。\n─────────────\n系列: 附魔詞條'},
+      {nm:'創造星團Lv3', rate:'0.40%', desc:'C.RATE+3, 治癒強化+10%。\n─────────────\n系列: 附魔詞條'},
+    ]},
+  stone:{
+    title:'選擇服飾強化石 — 上段', note:'清單僅顯示: 上段用強化石',
+    items:[
+      {nm:'服飾強化石(上段ATK)', desc:'ATK+1%。\n─────────────\n系列: 服飾強化石\n裝備位置: 服飾上段', foot:''},
+      {nm:'服飾強化石(上段MATK)', desc:'MATK+1%。\n─────────────\n系列: 服飾強化石\n裝備位置: 服飾上段', foot:''},
+      {nm:'服飾強化石(上段ASPD)', desc:'ASPD+1。\n─────────────\n系列: 服飾強化石\n裝備位置: 服飾上段', foot:''},
+      {nm:'服飾強化石(頭CRI)', desc:'CRI+2。\n─────────────\n系列: 服飾強化石\n裝備位置: 服飾上段', foot:''},
+    ]},
+};
+let curItems=[];
+function openPicker(kind){
+  const cfg=PICKS[kind]; curItems=cfg.items;
+  document.getElementById('pkTitle').textContent=cfg.title;
+  document.getElementById('pkNote').textContent=cfg.note;
+  document.getElementById('pkSearch').value='';
+  renderList(curItems);
+  document.getElementById('overlay').hidden=false;
+  document.getElementById('pkSearch').focus();
+}
+function renderList(items){
+  const el=document.getElementById('pkList');
+  el.innerHTML=items.map((i,idx)=>
+    `<div class="pitem" data-idx="${idx}"><span class="nm">${i.nm}</span>`+
+    (i.rate?`<span class="rate">${i.rate}</span>`:'')+`</div>`).join('');
+  document.getElementById('pkCount').textContent=`${items.length} 筆`;
+  el.querySelectorAll('.pitem').forEach(p=>{
+    p.addEventListener('mouseenter',e=>showTip(items[+p.dataset.idx],e));
+    p.addEventListener('mousemove',moveTip);
+    p.addEventListener('mouseleave',hideTip);
+  });
+}
+let filtered=[];
+function filterList(){
+  const q=document.getElementById('pkSearch').value.trim();
+  filtered=q?curItems.filter(i=>i.nm.includes(q)):curItems;
+  renderList(filtered);
+}
+function closePicker(){ document.getElementById('overlay').hidden=true; hideTip(); }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closePicker(); });
+
+/* ---------- 道具tooltip ---------- */
+const tip=document.getElementById('tooltip');
+function showTip(item,e){
+  tip.innerHTML=`<div class="tname">${item.nm}</div><div class="tdesc">${item.desc||''}</div>`+
+    (item.foot?`<div class="tfoot">${item.foot}</div>`:'');
+  tip.hidden=false; moveTip(e);
+}
+function moveTip(e){
+  if(tip.hidden) return;
+  const pad=14, w=tip.offsetWidth, h=tip.offsetHeight;
+  let x=e.clientX+pad, y=e.clientY+pad;
+  if(x+w>innerWidth-8) x=e.clientX-w-pad;
+  if(y+h>innerHeight-8) y=e.clientY-h-pad;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+function hideTip(){ tip.hidden=true; }
+</script>
