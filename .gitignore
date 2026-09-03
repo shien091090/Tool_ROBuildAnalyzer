@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+data/*.db
+data/lub/
+data/lua/
+config.json
+.worktrees/
+.superpowers/
+.pytest_cache/
