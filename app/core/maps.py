@@ -1,3 +1,4 @@
+import contextlib
 import sqlite3
 from dataclasses import dataclass
 
@@ -126,17 +127,14 @@ def load_skill_map(db_path: str) -> dict[int, str]:
     """Load skill map from database (skill_id -> skill_name).
 
     Raises sqlite3.OperationalError if the skills table does not exist or other DB errors occur.
-    Uses context manager to ensure connection always closes.
+    Uses contextlib.closing() to ensure connection is always closed on all code paths.
     """
     skill_map = {}
-    with sqlite3.connect(db_path) as conn:
+    with contextlib.closing(sqlite3.connect(db_path)) as conn:
         cursor = conn.cursor()
-        try:
-            cursor.execute("SELECT skill_id, skill_name FROM skills")
-            for skill_id, skill_name in cursor.fetchall():
-                skill_map[skill_id] = skill_name
-        finally:
-            cursor.close()
+        cursor.execute("SELECT skill_id, skill_name FROM skills")
+        for skill_id, skill_name in cursor.fetchall():
+            skill_map[skill_id] = skill_name
     return skill_map
 
 

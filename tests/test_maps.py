@@ -41,7 +41,33 @@ def test_load_skill_map():
         assert skill_map[5015] == "劍術訓練"
         assert skill_map[1234] == "火球"
         assert len(skill_map) == 2
-        gc.collect()  # Release file locks before tempdir cleanup
+
+
+def test_load_skill_map_closes_connection():
+    # Behavioral test: verify connection is actually closed by attempting to delete the file
+    # On Windows, a file with an open handle cannot be deleted (raises PermissionError)
+    db_path = None
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = os.path.join(tmpdir, "test.db")
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("CREATE TABLE skills (skill_id INTEGER PRIMARY KEY, skill_name TEXT)")
+        cursor.execute("INSERT INTO skills VALUES (5015, '劍術訓練')")
+        conn.commit()
+        cursor.close()
+        conn.close()
+        gc.collect()
+
+        # Call load_skill_map
+        skill_map = maps.load_skill_map(db_path)
+        assert skill_map[5015] == "劍術訓練"
+
+        # Try to delete the file - this will raise PermissionError if connection is still open (on Windows)
+        # If this passes, the connection was properly closed
+        try:
+            os.remove(db_path)
+        except PermissionError:
+            pytest.fail("Database file still locked after load_skill_map - connection not closed properly")
 
 
 def test_load_skill_map_missing_table():
