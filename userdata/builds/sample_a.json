@@ -6,7 +6,14 @@
       "refine": 13,
       "grade": "A",
       "cards": [4001],
-      "enchants": ["Inteligence5"]
+      "enchants": ["Inteligence5"],
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "ether_armor2",
+        "enchant_strategy": "last_slot_only",
+        "enchant_goal": [1, "Star_Cluster_Of_Wis3"]
+      }
     }
   }
 }
