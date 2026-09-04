@@ -58,6 +58,18 @@ def test_stat_line_numeric_entries_and_ctx_maps():
     assert ctx.armor_level_map.get(5) == 7
 
 
+def test_stat_line_weapon_atk_category_damage():
+    ctx = _ctx()
+    # category-taxonomy: Stat-line entries are categorized by stat name, not
+    # keyword matching. Mweapon stat_name_sets: idx2=武器ATK -> CAT_DAMAGE.
+    block = 'Type = "Mweapon"\nStat = {0,0,120,0,0,0,0,0,0,0,0,0,0,0,0,0,0}\n'
+    r = parser.parse_effect_block(block, ctx, 1, _maps())
+    atk_entries = [e for e in r.entries if e.key == "武器ATK"]
+    assert len(atk_entries) == 1
+    assert atk_entries[0].value == 120.0
+    assert atk_entries[0].category == entries.CAT_DAMAGE
+
+
 def test_excluded_stat_not_emitted():
     ctx = _ctx()
     block = 'Type = "armor"\nStat = {0,0,0,0,0,0,0,0,0,0,15}\n'

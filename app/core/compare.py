@@ -19,6 +19,7 @@ implement the contract: biggest value wins.
 from dataclasses import dataclass
 
 from app.core.aggregate import BuildEffects
+from app.core.entries import CAT_ABILITY, CAT_DAMAGE, CAT_OTHER, CAT_RESIST, CAT_SECONDARY
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,7 @@ def compare_builds(a: BuildEffects, b: BuildEffects) -> list[CompareRow]:
         b: BuildEffects
 
     Returns:
-        list[CompareRow] sorted by category (physical→magical→other) then by key.
+        list[CompareRow] sorted by category (傷害→抗性→能力→次要能力→其他) then by key.
     """
     # Union of all (key, unit) pairs from both builds
     all_keys = set(a.totals.keys()) | set(b.totals.keys())
@@ -80,8 +81,8 @@ def compare_builds(a: BuildEffects, b: BuildEffects) -> list[CompareRow]:
             )
         )
 
-    # Sort: by category (physical→magical→other), then by key
-    category_order = {"physical": 0, "magical": 1, "other": 2}
+    # Sort: by category (傷害→抗性→能力→次要能力→其他), then by key
+    category_order = {CAT_DAMAGE: 0, CAT_RESIST: 1, CAT_ABILITY: 2, CAT_SECONDARY: 3, CAT_OTHER: 4}
     rows.sort(key=lambda r: (category_order[r.category], r.key))
 
     return rows

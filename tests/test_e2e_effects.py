@@ -77,18 +77,29 @@ def test_450263_base_effects():
 
 def test_no_display_string_reparsing():
     """架構鐵則哨兵: aggregate/compare/cli 不得對顯示字串重新做 re.match/
-    re.search 解析, 也不得重新呼叫 classify_category 對 key 字串重新分類.
+    re.search 解析.
 
     這幾個模組只應該消費 EffectEntry/BuildEffects 的結構化欄位(key/value/unit/
     kind/category), 不該再對 parser.py 已經產出的顯示字串(如 se.entry.key)
     自己重新用正則去猜語意、或重新推導category — 那類邏輯只能活在 parser.py
-    裡(C2: classify_category在全專案只剩parser.py這一個production呼叫點)。
+    裡(category-taxonomy: 分類改由parser.py handler層直接標註, 顯示字串仍不得
+    被下游模組重新解析)。
     """
     for module in (aggregate_module, compare_module, cli_module):
         source = inspect.getsource(module)
         assert "re.match" not in source
         assert "re.search" not in source
-        assert "classify_category" not in source
+
+
+def test_classify_category_not_reintroduced():
+    """回歸哨兵: classify_category (舊keyword-based分類函式)已整支刪除,
+    不得在app/任何原始碼中重新出現 — 分類權威唯一來源是parser.py handler層
+    的顯式標註(EXTPARAM_CATEGORY/_stat_category/#1-68逐一標註), 不是關鍵字比對。
+    """
+    app_root = _REPO_ROOT / "app"
+    for py_file in app_root.rglob("*.py"):
+        source = py_file.read_text(encoding="utf-8")
+        assert "classify_category" not in source, f"classify_category reappeared in {py_file}"
 
 
 def test_full_build_evaluate_smoke():

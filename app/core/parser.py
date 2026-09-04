@@ -62,18 +62,60 @@ from app.core import lua_expr
 from app.core import maps as static_maps
 from app.core.context import CalcContext
 from app.core.entries import (
+    CAT_ABILITY,
+    CAT_DAMAGE,
     CAT_OTHER,
+    CAT_RESIST,
+    CAT_SECONDARY,
     EffectEntry,
     KIND_DESCRIPTIVE,
     KIND_NUMERIC,
     KIND_PROC,
     KIND_UNRECOGNIZED,
     KIND_UNRESOLVED,
-    classify_category,
 )
 from app.core.maps import EffectMaps
 
 IGNORE_PREFIXES = ("local ", "Stat ", "{Type ", "}", "function")
+
+# AddExtParam/SubExtParam (handler #3) sub-mapping by static_maps.EFFECT_MAP
+# id — source: user's 效果分類.xlsx (category-taxonomy branch ruling). Every
+# id currently in EFFECT_MAP is covered here; an id NOT in EFFECT_MAP falls
+# back to the f"參數{param_id}" display string (handler #3's own fallback)
+# and is categorized CAT_OTHER via this dict's own .get() fallback.
+EXTPARAM_CATEGORY: dict[int, str] = {
+    # CAT_DAMAGE: ATK / ATK% / MATK / MATK%
+    41: CAT_DAMAGE, 207: CAT_DAMAGE, 200: CAT_DAMAGE, 140: CAT_DAMAGE,
+    # CAT_ABILITY: DEF/MDEF/HIT/FLEE/完全迴避/CRI/ASPD, 六圍, MHP/MSP(%),
+    # 攻擊後延遲, POW/STA/WIS/SPL/CON/CRT, P.ATK/S.MATK/RES/MRES, C.RATE/H.PLUS,
+    # (2轉以下)攻擊後延遲/(2轉以下)ASPD
+    45: CAT_ABILITY, 47: CAT_ABILITY, 49: CAT_ABILITY, 50: CAT_ABILITY,
+    51: CAT_ABILITY, 52: CAT_ABILITY, 54: CAT_ABILITY,
+    103: CAT_ABILITY, 104: CAT_ABILITY, 105: CAT_ABILITY, 106: CAT_ABILITY,
+    107: CAT_ABILITY, 108: CAT_ABILITY,
+    109: CAT_ABILITY, 110: CAT_ABILITY, 111: CAT_ABILITY, 112: CAT_ABILITY,
+    167: CAT_ABILITY,
+    234: CAT_ABILITY, 235: CAT_ABILITY, 236: CAT_ABILITY, 237: CAT_ABILITY,
+    238: CAT_ABILITY, 239: CAT_ABILITY,
+    242: CAT_ABILITY, 243: CAT_ABILITY, 244: CAT_ABILITY, 245: CAT_ABILITY,
+    253: CAT_ABILITY, 254: CAT_ABILITY,
+    301: CAT_ABILITY, 302: CAT_ABILITY,
+    # CAT_SECONDARY: HP/SP自然恢復%
+    113: CAT_SECONDARY, 114: CAT_SECONDARY,
+}
+
+
+def _stat_category(stat_name: str) -> str:
+    """Category for Stat={...}/Type+Stat entries — stat-name based (not
+    keyword-based matching). 武器/箭矢/砲彈的ATK系欄位算傷害;
+    未知{idx} fallback(超出stat_names_list長度, 含STAT_NAME_SETS本身既有的
+    「未知7」「未知8」佔位欄位)算other; 其餘(DEF/MDEF/六圍/特性/屬性等)算能力。
+    """
+    if stat_name in ("武器ATK", "武器MATK", "箭矢/彈藥ATK", "砲彈ATK"):
+        return CAT_DAMAGE
+    if stat_name.startswith("未知"):
+        return CAT_OTHER
+    return CAT_ABILITY
 
 
 @dataclass
@@ -246,7 +288,7 @@ def _handle_type_stat(type_stat_match, entries_out) -> None:
         # never wrote ctx maps and never filtered EXCLUDED_STAT_NAMES in the
         # original — kept as-is (inventory 狀態副作用#3, 疑似原版bug照搬).
         entries_out.append(
-            EffectEntry(key=name, value=float(val), unit="", kind=KIND_NUMERIC, category=classify_category(name))
+            EffectEntry(key=name, value=float(val), unit="", kind=KIND_NUMERIC, category=_stat_category(name))
         )
 
 
@@ -281,7 +323,7 @@ def _handle_stat(stat_match, block_text, ctx: CalcContext, slot_id, entries_out)
 
         entries_out.append(
             EffectEntry(
-                key=stat_name, value=float(val), unit="", kind=KIND_NUMERIC, category=classify_category(stat_name)
+                key=stat_name, value=float(val), unit="", kind=KIND_NUMERIC, category=_stat_category(stat_name)
             )
         )
 
@@ -517,7 +559,7 @@ def _match_effect_handlers(
         skill_name = _skill_name(maps, skill_id)
         key = f"可使用【{skill_name}】Lv.{level}"
         entries_out.append(
-            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER,
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_SECONDARY,
                         extra={"target_kind": "skill", "target_id": skill_id, "level": level})
         )
         ctx.enabled_skill_levels[skill_id] = level
@@ -530,7 +572,7 @@ def _match_effect_handlers(
         skill_name = _skill_name(maps, skill_id)
         key = f"使用【{skill_name}】"
         entries_out.append(
-            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER,
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_SECONDARY,
                         extra={"target_kind": "skill", "target_id": skill_id})
         )
         ctx.used_skill_levels[skill_id] = True
@@ -541,7 +583,13 @@ def _match_effect_handlers(
     if m:
         op, _unit, param_id, val_expr = m.groups()
         val = lua_expr.safe_eval(val_expr, variables, ctx, slot_id)
-        effect_str = static_maps.EFFECT_MAP.get(int(param_id), f"參數{param_id}")
+        param_id_int = int(param_id)
+        effect_str = static_maps.EFFECT_MAP.get(param_id_int, f"參數{param_id}")
+        # Category is looked up by effect_map id (EXTPARAM_CATEGORY), NOT by
+        # effect_str keyword matching — an id missing from EFFECT_MAP (the
+        # f"參數{param_id}" fallback above) also misses EXTPARAM_CATEGORY and
+        # falls back to CAT_OTHER here.
+        category = EXTPARAM_CATEGORY.get(param_id_int, CAT_OTHER)
         if val is None:
             entries_out.append(_unrecognized(line))
             return True
@@ -551,7 +599,7 @@ def _match_effect_handlers(
             v = float(int(val) // 10)
             entries_out.append(
                 EffectEntry(key=effect_str, value=_signed(v, op), unit="", kind=KIND_NUMERIC,
-                            category=classify_category(effect_str))
+                            category=category)
             )
             return True
 
@@ -560,7 +608,7 @@ def _match_effect_handlers(
             signed = -val if op == "Add" else val
             entries_out.append(
                 EffectEntry(key=effect_str, value=signed, unit="%", kind=KIND_NUMERIC,
-                            category=classify_category(effect_str))
+                            category=category)
             )
             return True
 
@@ -568,7 +616,7 @@ def _match_effect_handlers(
         percent_suffix = "%" if str(effect_str).endswith("%") else ""
         entries_out.append(
             EffectEntry(key=effect_str, value=_signed(val, op), unit=percent_suffix, kind=KIND_NUMERIC,
-                        category=classify_category(effect_str))
+                        category=category)
         )
         return True
 
@@ -583,7 +631,7 @@ def _match_effect_handlers(
         key = "技能後延遲"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key))
+                        category=CAT_ABILITY)
         )
         return True
 
@@ -598,7 +646,7 @@ def _match_effect_handlers(
         key = "變動詠唱時間"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key))
+                        category=CAT_ABILITY)
         )
         return True
 
@@ -619,7 +667,7 @@ def _match_effect_handlers(
         key = "固定詠唱時間"
         entries_out.append(
             EffectEntry(key=key, value=round(_signed(val_ms, op) / 1000, 2), unit="秒", kind=KIND_NUMERIC,
-                        category=classify_category(key))
+                        category=CAT_ABILITY)
         )
         return True
 
@@ -647,7 +695,7 @@ def _match_effect_handlers(
         key = "固定詠唱時間"
         entries_out.append(
             EffectEntry(key=key, value=float(_signed(v, op)), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key))
+                        category=CAT_ABILITY)
         )
         return True
 
@@ -664,7 +712,7 @@ def _match_effect_handlers(
         key = f"技能【{skill_name}】傷害(裝備段)"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "skill", "target_id": skill_id})
         )
         return True
 
@@ -682,7 +730,7 @@ def _match_effect_handlers(
         key = f"技能【{skill_name}】傷害(技能段)"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "skill", "target_id": skill_id})
         )
         return True
 
@@ -715,7 +763,7 @@ def _match_effect_handlers(
         key = f"技能【{skill_name}】變動詠唱時間"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+                        category=CAT_ABILITY, extra={"target_kind": "skill", "target_id": skill_id})
         )
         return True
 
@@ -737,7 +785,7 @@ def _match_effect_handlers(
         key = f"從 {race_name} 型怪的經驗值"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_SECONDARY, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -751,7 +799,7 @@ def _match_effect_handlers(
             return True
         key = "掉寶率"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_OTHER)
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_SECONDARY)
         )
         return True
 
@@ -772,7 +820,7 @@ def _match_effect_handlers(
         key = f"{element} 的魔法傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "element", "target_id": elem_id})
         )
         return True
 
@@ -790,7 +838,7 @@ def _match_effect_handlers(
         key = f"對 {size_name} 敵人的魔法傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "size", "target_id": size_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "size", "target_id": size_id})
         )
         return True
 
@@ -807,7 +855,7 @@ def _match_effect_handlers(
         key = f"對 {race_name} 型怪的魔法傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -825,7 +873,7 @@ def _match_effect_handlers(
         key = f"對 {elem_name} 對象的魔法傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "element", "target_id": elem_id})
         )
         return True
 
@@ -842,7 +890,7 @@ def _match_effect_handlers(
         key = f"對 {class_name} 階級的魔法傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "class", "target_id": class_id})
         )
         return True
 
@@ -860,7 +908,7 @@ def _match_effect_handlers(
         key = f"無視 {class_name} 階級的魔法防禦"
         entries_out.append(
             EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "class", "target_id": class_id})
         )
         return True
 
@@ -877,7 +925,7 @@ def _match_effect_handlers(
         key = f"無視 {race_name} 型怪的魔法防禦"
         entries_out.append(
             EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -895,7 +943,7 @@ def _match_effect_handlers(
         key = f"無視 {race_name} 型怪的魔法抗性"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -910,7 +958,7 @@ def _match_effect_handlers(
             return True
         key = "特定魔物魔法增傷"
         entries_out.append(
-            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -923,7 +971,7 @@ def _match_effect_handlers(
             return True
         key = "特定魔物魔法增傷"
         entries_out.append(
-            EffectEntry(key=key, value=-val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=-val, unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -940,7 +988,7 @@ def _match_effect_handlers(
             return True
         key = "修煉ATK"
         entries_out.append(
-            EffectEntry(key=key, value=val, unit="", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=val, unit="", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -953,7 +1001,7 @@ def _match_effect_handlers(
             return True
         key = "神威ATK"
         entries_out.append(
-            EffectEntry(key=key, value=val, unit="", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=val, unit="", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -966,7 +1014,7 @@ def _match_effect_handlers(
             return True
         key = "誘導攻擊機率"
         entries_out.append(
-            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -980,7 +1028,7 @@ def _match_effect_handlers(
             return True
         key = "物理命中傷害"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -994,7 +1042,7 @@ def _match_effect_handlers(
             return True
         key = "近距離物理傷害"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -1008,7 +1056,7 @@ def _match_effect_handlers(
             return True
         key = "遠距離物理傷害"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -1023,7 +1071,7 @@ def _match_effect_handlers(
             return True
         key = "弓攻擊力"
         entries_out.append(
-            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -1037,7 +1085,7 @@ def _match_effect_handlers(
             return True
         key = "爆擊傷害"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -1057,7 +1105,7 @@ def _match_effect_handlers(
         key = f"對 {size_name} 敵人的物理傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "size", "target_id": size_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "size", "target_id": size_id})
         )
         return True
 
@@ -1074,7 +1122,7 @@ def _match_effect_handlers(
         key = f"對 {race_name} 型怪的物理傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -1092,7 +1140,7 @@ def _match_effect_handlers(
         key = f"對 {elem_name} 對象的物理傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "element", "target_id": elem_id})
         )
         return True
 
@@ -1109,7 +1157,7 @@ def _match_effect_handlers(
         key = f"對 {class_name} 階級的物理傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "class", "target_id": class_id})
         )
         return True
 
@@ -1122,7 +1170,7 @@ def _match_effect_handlers(
         key = f"無視 {class_name} 階級的物理防禦"
         entries_out.append(
             EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE,
-                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "class", "target_id": class_id})
         )
         return True
 
@@ -1138,7 +1186,7 @@ def _match_effect_handlers(
         key = f"無視 {class_name} 階級的物理防禦"
         entries_out.append(
             EffectEntry(key=key, value=float(value), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "class", "target_id": class_id})
         )
         return True
 
@@ -1156,7 +1204,7 @@ def _match_effect_handlers(
         key = f"無視 {race_name} 型怪的物理防禦"
         entries_out.append(
             EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -1174,7 +1222,7 @@ def _match_effect_handlers(
         key = f"無視 {race_name} 型怪的物理抗性"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -1189,7 +1237,7 @@ def _match_effect_handlers(
             return True
         key = "特定魔物物理增傷"
         entries_out.append(
-            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=val, unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -1202,7 +1250,7 @@ def _match_effect_handlers(
             return True
         key = "特定魔物物理增傷"
         entries_out.append(
-            EffectEntry(key=key, value=-val, unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=-val, unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -1214,7 +1262,7 @@ def _match_effect_handlers(
         key = f"無視 {race_name} 型怪的物理防禦"
         entries_out.append(
             EffectEntry(key=key, value=100.0, unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -1226,7 +1274,7 @@ def _match_effect_handlers(
     if m:
         key = "武器體型修正 100%"
         entries_out.append(
-            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=classify_category(key))
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_DAMAGE)
         )
         return True
 
@@ -1244,11 +1292,11 @@ def _match_effect_handlers(
     if m:
         entries_out.append(
             EffectEntry(key="武器浸透勁效果", value=None, unit="", kind=KIND_DESCRIPTIVE,
-                        category=classify_category("武器浸透勁效果"))
+                        category=CAT_DAMAGE)
         )
         key2 = "無視 全種族 型怪的物理防禦"
         entries_out.append(
-            EffectEntry(key=key2, value=100.0, unit="%", kind=KIND_NUMERIC, category=classify_category(key2))
+            EffectEntry(key=key2, value=100.0, unit="%", kind=KIND_NUMERIC, category=CAT_DAMAGE)
         )
         return True
 
@@ -1291,7 +1339,7 @@ def _match_effect_handlers(
             return True
         key = "治癒量"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_SECONDARY)
         )
         return True
 
@@ -1306,7 +1354,7 @@ def _match_effect_handlers(
             return True
         key = "被治癒量"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_SECONDARY)
         )
         return True
 
@@ -1334,7 +1382,7 @@ def _match_effect_handlers(
             key = f"{pool}吸收"
             entries_out.append(
                 EffectEntry(key=key, value=_signed(rate, op), unit="%", kind=KIND_NUMERIC,
-                            category=classify_category(key))
+                            category=CAT_SECONDARY)
             )
             return True
         amount = lua_expr.eval_lua_arg(args, 1, None, variables, ctx, slot_id)
@@ -1345,11 +1393,11 @@ def _match_effect_handlers(
         key_amount = f"{pool}吸收量"
         entries_out.append(
             EffectEntry(key=key_rate, value=_signed(rate, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key_rate))
+                        category=CAT_SECONDARY)
         )
         entries_out.append(
             EffectEntry(key=key_amount, value=_signed(amount, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key_amount))
+                        category=CAT_SECONDARY)
         )
         return True
 
@@ -1364,7 +1412,7 @@ def _match_effect_handlers(
             return True
         key = "SP消耗"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_SECONDARY)
         )
         return True
 
@@ -1388,7 +1436,7 @@ def _match_effect_handlers(
         key = f"技能【{skill_name}】SP消耗"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op.capitalize()), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+                        category=CAT_SECONDARY, extra={"target_kind": "skill", "target_id": skill_id})
         )
         return True
 
@@ -1410,7 +1458,7 @@ def _match_effect_handlers(
         key = f"技能【{skill_name}】SP消耗"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+                        category=CAT_SECONDARY, extra={"target_kind": "skill", "target_id": skill_id})
         )
         return True
 
@@ -1424,7 +1472,7 @@ def _match_effect_handlers(
             return True
         key = "受到近距離物理傷害"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_RESIST)
         )
         return True
 
@@ -1438,7 +1486,7 @@ def _match_effect_handlers(
             return True
         key = "受到遠距離物理傷害"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_RESIST)
         )
         return True
 
@@ -1455,7 +1503,7 @@ def _match_effect_handlers(
         key = f"對 {elem_name} 攻擊抗性"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+                        category=CAT_RESIST, extra={"target_kind": "element", "target_id": elem_id})
         )
         return True
 
@@ -1473,7 +1521,7 @@ def _match_effect_handlers(
         key = f"對 {elem_name} 攻擊抗性"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op.capitalize()), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+                        category=CAT_RESIST, extra={"target_kind": "element", "target_id": elem_id})
         )
         return True
 
@@ -1491,7 +1539,7 @@ def _match_effect_handlers(
         key = f"受到 {size_name} 敵人的物理傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "size", "target_id": size_id})
+                        category=CAT_RESIST, extra={"target_kind": "size", "target_id": size_id})
         )
         return True
 
@@ -1510,7 +1558,7 @@ def _match_effect_handlers(
         key = f"受到 {size_name} 敵人的魔法傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "size", "target_id": size_id})
+                        category=CAT_RESIST, extra={"target_kind": "size", "target_id": size_id})
         )
         return True
 
@@ -1533,7 +1581,7 @@ def _match_effect_handlers(
         key = f"受到 {race_name} 型怪的傷害"
         entries_out.append(
             EffectEntry(key=key, value=signed_val, unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_RESIST, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -1550,7 +1598,7 @@ def _match_effect_handlers(
         key = f"受到 {elem_name} 對象的物理傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+                        category=CAT_RESIST, extra={"target_kind": "element", "target_id": elem_id})
         )
         return True
 
@@ -1567,7 +1615,7 @@ def _match_effect_handlers(
         key = f"受到 {elem_name} 對象的魔法傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "element", "target_id": elem_id})
+                        category=CAT_RESIST, extra={"target_kind": "element", "target_id": elem_id})
         )
         return True
 
@@ -1584,7 +1632,7 @@ def _match_effect_handlers(
         key = f"受到 {class_name} 階級的物理傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "class", "target_id": class_id})
+                        category=CAT_RESIST, extra={"target_kind": "class", "target_id": class_id})
         )
         return True
 
@@ -1605,7 +1653,7 @@ def _match_effect_handlers(
         key = f"受到 {race_name} 型怪的傷害"
         entries_out.append(
             EffectEntry(key=key, value=signed_val, unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_RESIST, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -1622,7 +1670,7 @@ def _match_effect_handlers(
         key = f"對 {race_name} 型怪的CRI"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "race", "target_id": race_id})
+                        category=CAT_DAMAGE, extra={"target_kind": "race", "target_id": race_id})
         )
         return True
 
@@ -1637,7 +1685,7 @@ def _match_effect_handlers(
             return True
         key = "近距離物理反射"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_RESIST)
         )
         return True
 
@@ -1652,7 +1700,7 @@ def _match_effect_handlers(
             return True
         key = "魔法反射"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_RESIST)
         )
         return True
 
@@ -1667,7 +1715,7 @@ def _match_effect_handlers(
             return True
         key = "反射傷害耐性"
         entries_out.append(
-            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC, category=CAT_RESIST)
         )
         return True
 
@@ -1687,7 +1735,7 @@ def _match_effect_handlers(
         key = f"受到技能【{skill_name}】傷害"
         entries_out.append(
             EffectEntry(key=key, value=_signed(val, op), unit="%", kind=KIND_NUMERIC,
-                        category=classify_category(key), extra={"target_kind": "skill", "target_id": skill_id})
+                        category=CAT_RESIST, extra={"target_kind": "skill", "target_id": skill_id})
         )
         return True
 
@@ -1704,7 +1752,7 @@ def _match_effect_handlers(
         func_name = m.group(1)
         key = static_maps.PLAIN_EFFECT_MAP.get(func_name, func_name)
         entries_out.append(
-            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_OTHER)
+            EffectEntry(key=key, value=None, unit="", kind=KIND_DESCRIPTIVE, category=CAT_SECONDARY)
         )
         return True
 
@@ -1728,7 +1776,7 @@ def _match_effect_handlers(
         chance = lua_expr.eval_lua_arg(args, 2, None, variables, ctx, slot_id)
         key = f"賦予狀態：{status_name}"
         entries_out.append(
-            EffectEntry(key=key, value=None, unit="", kind=KIND_PROC, category=CAT_OTHER,
+            EffectEntry(key=key, value=None, unit="", kind=KIND_PROC, category=CAT_SECONDARY,
                         extra={"status": status_name, "duration": duration, "chance": chance})
         )
         return True
@@ -1898,7 +1946,7 @@ def parse_effect_block(
         value = round(total_ms / 1000, 2)
         key = f"技能【{skill_name}】冷卻時間"
         entries_out.append(
-            EffectEntry(key=key, value=value, unit="秒", kind=KIND_NUMERIC, category=classify_category(key))
+            EffectEntry(key=key, value=value, unit="秒", kind=KIND_NUMERIC, category=CAT_ABILITY)
         )
 
     return ParseResult(entries=entries_out, trace=trace)

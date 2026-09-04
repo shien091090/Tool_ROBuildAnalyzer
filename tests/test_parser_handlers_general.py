@@ -48,10 +48,9 @@ def test_enable_skill_descriptive_entry_and_writes_ctx():
     assert e.key == "可使用【波動拳】Lv.5"
     assert e.value is None
     assert e.kind == entries.KIND_DESCRIPTIVE
-    # I4: controller ruling — category STAYS CAT_OTHER (skill names may
-    # contain misleading keywords like "MATK", so it does NOT switch to
-    # classify_category), but the entry does gain structured target metadata.
-    assert e.category == entries.CAT_OTHER
+    # category-taxonomy: handler #1 EnableSkill -> CAT_SECONDARY (binding
+    # handler-level mapping; not derived from the skill-name key string).
+    assert e.category == entries.CAT_SECONDARY
     assert e.extra == {"target_kind": "skill", "target_id": 63, "level": 5}
     assert ctx.enabled_skill_levels[63] == 5
 
@@ -88,9 +87,9 @@ def test_use_skill_descriptive_entry_and_writes_ctx():
     assert e.key == "使用【波動拳】"
     assert e.value is None
     assert e.kind == entries.KIND_DESCRIPTIVE
-    # I4: same controller ruling as EnableSkill — category stays CAT_OTHER;
+    # category-taxonomy: handler #2 UseSkill -> CAT_SECONDARY (same as #1);
     # extra has no "level" key (UseSkill takes no skill-level argument).
-    assert e.category == entries.CAT_OTHER
+    assert e.category == entries.CAT_SECONDARY
     assert e.extra == {"target_kind": "skill", "target_id": 63}
     assert ctx.used_skill_levels[63] is True
 
@@ -160,6 +159,25 @@ def test_ext_param_effect_map_miss_fallback():
     e = r.entries[0]
     assert e.key == "參數9999"
     assert e.value == 5.0
+
+
+def test_ext_param_category_routing_via_extparam_category_dict():
+    # category-taxonomy: AddExtParam/SubExtParam category is looked up by
+    # effect_map id via parser.EXTPARAM_CATEGORY, not by effect_str keyword
+    # matching. id 41 (ATK) -> damage, id 47 (MDEF) -> ability,
+    # id 113 (HP自然恢復%) -> secondary, unknown id -> other (fallback path).
+    r_41 = parser.parse_effect_block("AddExtParam(1,41,8)", _ctx(), None, _maps())
+    assert r_41.entries[0].category == entries.CAT_DAMAGE
+
+    r_47 = parser.parse_effect_block("AddExtParam(1,47,8)", _ctx(), None, _maps())
+    assert r_47.entries[0].category == entries.CAT_ABILITY
+
+    r_113 = parser.parse_effect_block("AddExtParam(1,113,8)", _ctx(), None, _maps())
+    assert r_113.entries[0].category == entries.CAT_SECONDARY
+
+    r_unknown = parser.parse_effect_block("AddExtParam(1,9999,5)", _ctx(), None, _maps())
+    assert r_unknown.entries[0].key == "參數9999"
+    assert r_unknown.entries[0].category == entries.CAT_OTHER
 
 
 def test_ext_param_unresolvable_value_becomes_unrecognized():
@@ -388,7 +406,7 @@ def test_receive_item_equip_drop_rate_numeric():
     assert e.value == 5.0
     assert e.unit == "%"
     assert e.kind == entries.KIND_NUMERIC
-    assert e.category == entries.CAT_OTHER
+    assert e.category == entries.CAT_SECONDARY
 
 
 def test_receive_item_equip_sub():

@@ -49,7 +49,7 @@ def test_skill_mdamage_add_and_sub():
     assert e.value == 20.0
     assert e.unit == "%"
     assert e.kind == entries.KIND_NUMERIC
-    assert e.category == entries.CAT_MAGICAL
+    assert e.category == entries.CAT_DAMAGE
     assert e.extra == {"target_kind": "element", "target_id": 3}
 
     r_sub = parser.parse_effect_block("SubSkillMDamage(3,20)", _ctx(), None, _maps())
@@ -183,7 +183,7 @@ def test_monster_matk_percent_add_and_sub():
     e_add = r_add.entries[0]
     assert e_add.key == "特定魔物魔法增傷"
     assert e_add.value == 7.0
-    assert e_add.category == entries.CAT_MAGICAL
+    assert e_add.category == entries.CAT_DAMAGE
 
     r_sub = parser.parse_effect_block("SubMonsterMAtkPercent(7)", _ctx(), None, _maps())
     e_sub = r_sub.entries[0]
@@ -202,7 +202,7 @@ def test_weapon_mastery_atk_no_percent_unit():
     assert e.key == "修煉ATK"
     assert e.value == 50.0
     assert e.unit == ""
-    assert e.category == entries.CAT_PHYSICAL
+    assert e.category == entries.CAT_DAMAGE
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +219,7 @@ def test_kamui_special_atk_no_percent_unit():
 
 
 # ---------------------------------------------------------------------------
-# #26 AddGuideAttack — NUMERIC, category via "誘導攻擊" physical keyword
+# #26 AddGuideAttack — NUMERIC, category CAT_DAMAGE (handler-level mapping)
 # ---------------------------------------------------------------------------
 
 
@@ -230,7 +230,7 @@ def test_guide_attack_numeric_physical():
     assert e.value == 15.0
     assert e.unit == "%"
     assert e.kind == entries.KIND_NUMERIC
-    assert e.category == entries.CAT_PHYSICAL
+    assert e.category == entries.CAT_DAMAGE
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +257,7 @@ def test_melee_attack_damage():
     e = r.entries[0]
     assert e.key == "近距離物理傷害"
     assert e.value == 8.0
-    assert e.category == entries.CAT_PHYSICAL
+    assert e.category == entries.CAT_DAMAGE
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +329,7 @@ def test_race_damage_full_string():
     assert e.value == 20.0
     assert e.unit == "%"
     assert e.kind == entries.KIND_NUMERIC
-    assert e.category == entries.CAT_PHYSICAL
+    assert e.category == entries.CAT_DAMAGE
     assert e.extra == {"target_kind": "race", "target_id": 1}
 
 
@@ -382,7 +382,7 @@ def test_ignore_def_class_descriptive_no_value():
     assert e.value is None
     assert e.unit == ""
     assert e.kind == entries.KIND_DESCRIPTIVE
-    assert e.category == entries.CAT_PHYSICAL
+    assert e.category == entries.CAT_DAMAGE
     assert e.extra == {"target_kind": "class", "target_id": 1}
 
 
@@ -438,7 +438,7 @@ def test_monster_atk_percent_add_and_sub():
     e_add = r_add.entries[0]
     assert e_add.key == "特定魔物物理增傷"
     assert e_add.value == 9.0
-    assert e_add.category == entries.CAT_PHYSICAL
+    assert e_add.category == entries.CAT_DAMAGE
 
     r_sub = parser.parse_effect_block("SubMonsterAtkPercent(9)", _ctx(), None, _maps())
     e_sub = r_sub.entries[0]
@@ -473,7 +473,7 @@ def test_perfect_damage_descriptive_constant():
     assert e.value is None
     assert e.unit == ""
     assert e.kind == entries.KIND_DESCRIPTIVE
-    assert e.category == entries.CAT_PHYSICAL
+    assert e.category == entries.CAT_DAMAGE
 
 
 # ---------------------------------------------------------------------------
@@ -490,14 +490,14 @@ def test_investigate_exact_call_emits_two_entries():
     assert e1.key == "武器浸透勁效果"
     assert e1.value is None
     assert e1.kind == entries.KIND_DESCRIPTIVE
-    assert e1.category == entries.CAT_PHYSICAL
+    assert e1.category == entries.CAT_DAMAGE
 
     e2 = r.entries[1]
     assert e2.key == "無視 全種族 型怪的物理防禦"
     assert e2.value == 100.0
     assert e2.unit == "%"
     assert e2.kind == entries.KIND_NUMERIC
-    assert e2.category == entries.CAT_PHYSICAL
+    assert e2.category == entries.CAT_DAMAGE
 
 
 def test_investigate_regex_fix_rejects_prefix_only_match():
