@@ -127,20 +127,28 @@ class DbReader:
     def enchant_table_for_item(self, internal_name: str) -> int | None:
         """查item internal_name所屬的自動附魔table_index, 查無回傳None。
 
-        target_internal_names欄位存的是JSON陣列字串(如'["Lunar_E_Armor_LT"]'),
-        用LIKE比對'"name"'子字串來判斷「在陣列裡」— 不逐列把JSON parse出來
-        比對, 是因為一個table常有數百列(每列一個詞條option), 用SQL LIKE直接
-        在DB端篩掉不相關列, 比Python端逐列json.loads划算得多。多個table撞到
-        同一item(理論上不該發生)時取table_index最小的一筆, 保持穩定。
+        target_internal_names欄位存的是JSON陣列字串(如'["Lunar_E_Armor_LT"]")。
+        **不能用SQL LIKE子字串比對**(先前版本的做法) — LIKE的`_`是SQL萬用
+        字元(比對「任一單一字元」), 而RO的internal_name慣例本來就是底線分隔
+        (`Item_A`會被LIKE的pattern`%"Item_A"%`誤配到`ItemXA`這種底線位置換成
+        任意字元的名字, 即使`ItemXA`實際上完全是另一個道具) — 這是SQL LIKE
+        比對JSON陣列子字串時的先天陷阱, 不是特例修補得完的, 唯一provably
+        correct的做法是把JSON陣列解出來做「真的list membership」檢查。
+        表數量目前只有81張, `SELECT DISTINCT table_index, target_internal_names`
+        一次撈全部、在Python端逐張json.loads()比對member, 成本可以忽略,
+        不需要為了效能犧牲正確性。多個table撞到同一item(理論上不該發生)時取
+        table_index最小的一筆, 保持穩定。
         """
         cursor = self._conn.cursor()
         cursor.execute(
-            "SELECT DISTINCT table_index FROM enchant_tables"
-            " WHERE target_internal_names LIKE ? ORDER BY table_index LIMIT 1",
-            (f'%"{internal_name}"%',),
+            "SELECT DISTINCT table_index, target_internal_names FROM enchant_tables"
         )
-        row = cursor.fetchone()
-        return row[0] if row else None
+        matched = [
+            table_index
+            for table_index, target_internal_names_str in cursor.fetchall()
+            if internal_name in json.loads(target_internal_names_str)
+        ]
+        return min(matched) if matched else None
 
     def enchant_rows(self, table_index: int) -> list[EnchantRow]:
         """撈table_index底下所有列, 依slot_index降冪排序(附魔由大槽往小槽的

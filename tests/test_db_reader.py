@@ -328,6 +328,51 @@ def test_enchant_table_for_item_miss(tmp_path):
     reader.close()
 
 
+def test_enchant_table_for_item_no_underscore_wildcard_cross_match(tmp_path):
+    """SQL LIKE的`_`是萬用字元(比對任一單一字元), 若用`LIKE '%"Item_A"%'`去
+    比對target_internal_names, 會誤配到target是"ItemXA"的table(底線位置被
+    當成可以是任意字元) — 即使兩者是完全不同的道具名。這支測試用兩個只在
+    底線位置不同的名字建fixture, 驗證改用json.loads()做真正list membership
+    後兩者互不誤配。
+    """
+    db_path = str(tmp_path / "underscore_trap.db")
+    conn = sqlite3.connect(db_path)
+    db.create(conn)
+    db.insert_enchants(
+        conn,
+        [
+            {
+                "table_index": 30,
+                "target_internal_names": ["ItemXA"],
+                "slot_index": 1,
+                "require_cost": "0",
+                "success_rate": 100000,
+                "option_internal_name": "DecoyOpt",
+                "option_weight": 1,
+            },
+            {
+                "table_index": 31,
+                "target_internal_names": ["Item_A"],
+                "slot_index": 1,
+                "require_cost": "0",
+                "success_rate": 100000,
+                "option_internal_name": "RealOpt",
+                "option_weight": 1,
+            },
+        ],
+    )
+    conn.commit()
+    conn.close()
+    reader = DbReader(db_path)
+
+    # 查"Item_A"必須精確命中table 31, 不能被table 30(target="ItemXA")誤配。
+    assert reader.enchant_table_for_item("Item_A") == 31
+    # 反向驗證: 查"ItemXA"必須精確命中table 30, 不能被table 31污染。
+    assert reader.enchant_table_for_item("ItemXA") == 30
+
+    reader.close()
+
+
 def test_enchant_rows_ordered_by_slot_desc_and_not_deduped(tmp_path):
     """Test that enchant_rows returns slot_index descending and keeps duplicate
     rows as-is(分母資料驅動需要看到原始重複列, 不能被讀取層去重)."""

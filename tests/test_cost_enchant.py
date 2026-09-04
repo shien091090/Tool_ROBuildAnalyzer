@@ -166,6 +166,20 @@ def test_last_slot_only_goal_not_last_slot_raises(tmp_path):
     reader.close()
 
 
+def test_goal_slot_index_absent_from_table_raises(tmp_path):
+    # 該表實際slot只有{3,2,1}, goal_slot_index=99完全不存在 — 兩種strategy
+    # 都該在同一道防呆(「目標slot不存在於此附魔表」)被擋下, 不該算出任何
+    # 看似合理的數字。用stop_when_hit驗證(last_slot_only的goal-not-last
+    # 防呆是另一條獨立路徑, 已在上面的測項覆蓋)。
+    db_path = _make_db(tmp_path, _MULTI_SLOT_ROWS)
+    reader = DbReader(db_path)
+
+    with pytest.raises(ValueError, match="目標slot 99不存在於此附魔表"):
+        solve_enchant(reader, _empty_manual(), "Test_Robe", 99, "OptE", "stop_when_hit")
+
+    reader.close()
+
+
 def test_unknown_strategy_raises(tmp_path):
     db_path = _make_db(tmp_path, _MULTI_SLOT_ROWS)
     reader = DbReader(db_path)
@@ -297,7 +311,7 @@ def test_targeted_adoption_when_cheaper(tmp_path):
     assert result.zeny == Fraction(1500)
     assert result.materials == {}
     assert result.expected_rounds == Fraction(1)
-    assert "採用指定附魔(較便宜)" in result.warnings
+    assert "採指定附魔(較便宜)" in result.warnings
     reader.close()
 
 
@@ -317,7 +331,7 @@ def test_targeted_rejected_when_dearer(tmp_path):
     assert result.zeny == Fraction(0)
     assert result.materials == {"Mat_X": Fraction(20)}
     assert result.expected_rounds == Fraction(10)
-    assert "採用指定附魔(較便宜)" not in result.warnings
+    assert "採指定附魔(較便宜)" not in result.warnings
     reader.close()
 
 
@@ -334,7 +348,7 @@ def test_targeted_comparison_missing_price_counts_as_zero_with_warning(tmp_path)
         reader, manual, "Targeted_Item", 1, "GoalOpt", "last_slot_only"
     )
 
-    assert "採用指定附魔(較便宜)" not in result.warnings
+    assert "採指定附魔(較便宜)" not in result.warnings
     assert any("Mat_X無價格" in w for w in result.warnings)
     reader.close()
 

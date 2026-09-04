@@ -44,7 +44,7 @@ prices字典折算成zeny做「公平比較」(材料沒有價格一律以0計, 
 持平或更貴一律留用隨機路線結果(不確定的東西不該被「反正比較省事」的心態
 覆蓋掉)。採用時的expected_rounds改記為1(指定附魔是一次到位的確定性路徑,
 沒有N輪隨機重試的概念), materials/zeny直接換成指定附魔那筆的固定值(不含
-隨機路線的任何殘留), warnings記「採用指定附魔(較便宜)」。
+隨機路線的任何殘留), warnings記「採指定附魔(較便宜)」。
 
 升級鏈(manual["upgrade_chains"]): M3只定schema、只讀取判斷「是否跟這次查詢
 的目標option有關」, 不實作多階比價演算法(YAGNI, spec §7.5允許後補) — 只要
@@ -68,7 +68,7 @@ _MATERIAL_RE = re.compile(r'\{\s*"([^"]+)"\s*,\s*(\d+)\s*\}')
 
 _UNAVAILABLE_WARNING = "舊式附魔未建檔, 不計入"
 _NO_RESET_RULE_WARNING = "無重置規則, 以免費重置計"
-_TARGETED_ADOPTED_WARNING = "採用指定附魔(較便宜)"
+_TARGETED_ADOPTED_WARNING = "採指定附魔(較便宜)"
 _UPGRADE_CHAIN_WARNING = "升級鏈暫不比價"
 
 
