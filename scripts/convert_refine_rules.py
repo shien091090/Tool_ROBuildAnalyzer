@@ -55,6 +55,18 @@ def parse_int_zeny(value) -> int:
     return int(str(value).replace(",", "").strip())
 
 
+def parse_fee(value) -> int:
+    """精煉表的花費(Zeny)欄: int、帶千分位逗號字串、'-'或空白(None)一律容錯, 空值→0。"""
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return int(value)
+    text = str(value).strip()
+    if text in ("", "-"):
+        return 0
+    return int(text.replace(",", ""))
+
+
 def parse_qty(value) -> int:
     """數量欄可能是int, 也可能是文字字串('1')。"""
     return int(str(value).strip())
@@ -101,7 +113,7 @@ def parse_lv_range(text: str) -> tuple[int, int]:
 
 
 def expand_steps(from_lv: int, to_lv: int, material: str, qty: int, rate: str,
-                  fail: str, blessing: int) -> list[dict]:
+                  fail: str, blessing: int, fee: int) -> list[dict]:
     """把'14~18'這種範圍展開成逐級step, 各step參數相同。"""
     steps = []
     for lv in range(from_lv, to_lv):
@@ -113,6 +125,7 @@ def expand_steps(from_lv: int, to_lv: int, material: str, qty: int, rate: str,
             "rate": rate,
             "fail": fail,
             "blessing": blessing,
+            "fee": fee,
         })
     return steps
 
@@ -123,46 +136,63 @@ def parse_named_qty(text: str, sep: str = "x") -> tuple[str, int]:
     return fix_name(name_part.strip()), int(qty_part.strip())
 
 
+def build_header_index(ws) -> dict[str, int]:
+    """讀取row1表頭文字, 建立欄名->欄index(0-based)對照表, 供依表頭名稱取值用。
+    row1裡值為None的欄(如兩材料欄共用表頭'材料'時, 第二欄無獨立表頭文字)不收錄。
+    """
+    header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
+    return {name: idx for idx, name in enumerate(header_row) if name is not None}
+
+
 def convert_refine_table(ws, display_col_b: str, display_col_c: str,
                           fail_mode: str) -> tuple[dict, dict]:
     """通用轉換: 精煉材料表/影子防具與手套/乙太防具與武器 三張表結構雷同
-    (精煉度範圍/兩欄材料/共用數量+機率+失敗欄), 差異只在欄位順序與fail_mode。
+    (精煉度範圍/兩欄材料/共用數量+機率+失敗+花費欄), 但三表的機率/失敗/防爆&防退/
+    花費(Zeny)欄彼此順序不同, 一律依表頭文字查欄位index、不依賴固定欄序。
 
     fail_mode:
-      'single'  - 單一失敗欄(精煉材料表F欄、影子表G欄), 用parse_fail_text
-      'ether'   - 失敗欄+防爆&防退欄兩欄合併判斷, 用parse_ether_fail
+      'single'  - 單一失敗欄(表頭'防爆&防退'或'失敗', 視表而定), 用parse_fail_text
+      'ether'   - '失敗'+'防爆&防退'兩欄合併判斷, 用parse_ether_fail
     """
     table_b = {"display": display_col_b, "steps": []}
     table_c = {"display": display_col_c, "steps": []}
 
+    headers = build_header_index(ws)
+    idx_range = headers.get("精煉度", 0)
+    idx_material_b = headers.get("材料", 1)
+    idx_material_c = idx_material_b + 1  # 兩材料欄緊鄰, 第二欄表頭文字在row1為None
+    idx_qty = headers["數量"]
+    idx_rate = headers["機率"]
+    idx_fee = headers.get("花費(Zeny)")  # 乙太表無此欄(None) -> fee一律0
+
+    if fail_mode == "single":
+        idx_fail_single = headers["防爆&防退"] if "防爆&防退" in headers else headers["失敗"]
+    elif fail_mode == "ether":
+        idx_fail = headers["失敗"]
+        idx_prevent = headers["防爆&防退"]
+    else:
+        raise ValueError(f"未知fail_mode: {fail_mode}")
+
     rows = list(ws.iter_rows(min_row=3, values_only=True))
     for row in rows:
-        if row[0] is None:
+        if row[idx_range] is None:
             continue
-        lv_from, lv_to = parse_lv_range(row[0])
-        material_b = fix_name(str(row[1]).strip())
-        material_c = fix_name(str(row[2]).strip())
-        qty = parse_qty(row[3])
+        lv_from, lv_to = parse_lv_range(row[idx_range])
+        material_b = fix_name(str(row[idx_material_b]).strip())
+        material_c = fix_name(str(row[idx_material_c]).strip())
+        qty = parse_qty(row[idx_qty])
+        rate = parse_rate(row[idx_rate])
+        fee = parse_fee(row[idx_fee]) if idx_fee is not None else 0
 
         if fail_mode == "single":
-            # 精煉材料表: D數量,E機率,F防爆&防退 / 影子表: D數量,E花費(略),F機率,G失敗
-            if ws.title == "精煉材料表":
-                rate = parse_rate(row[4])
-                fail, blessing = parse_fail_text(str(row[5]))
-            else:  # 影子防具與手套
-                rate = parse_rate(row[5])
-                fail, blessing = parse_fail_text(str(row[6]))
-        elif fail_mode == "ether":
-            # 乙太防具與武器: D數量,E機率,F失敗,G防爆&防退
-            rate = parse_rate(row[4])
-            fail, blessing = parse_ether_fail(str(row[5]), str(row[6]))
+            fail, blessing = parse_fail_text(str(row[idx_fail_single]))
         else:
-            raise ValueError(f"未知fail_mode: {fail_mode}")
+            fail, blessing = parse_ether_fail(str(row[idx_fail]), str(row[idx_prevent]))
 
         table_b["steps"].extend(
-            expand_steps(lv_from, lv_to, material_b, qty, rate, fail, blessing))
+            expand_steps(lv_from, lv_to, material_b, qty, rate, fail, blessing, fee))
         table_c["steps"].extend(
-            expand_steps(lv_from, lv_to, material_c, qty, rate, fail, blessing))
+            expand_steps(lv_from, lv_to, material_c, qty, rate, fail, blessing, fee))
 
     return table_b, table_c
 
