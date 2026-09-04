@@ -9,7 +9,7 @@ from app.core.cost.refine import (
     solve_grade_path,
     solve_refine,
 )
-from app.core.cost.rules import RefineStep, load_rules
+from app.core.cost.rules import CostRules, GradeStep, RefineStep, load_rules
 
 REAL_RULES_PATH = "userdata/refine_rules.json"
 
@@ -95,6 +95,23 @@ def test_missing_step_in_chain_raises():
     steps = [_step(0, 1, "X", 1, "1", "safe")]
     with pytest.raises(ValueError, match="缺少"):
         solve_refine(steps, target=3, blessing_item="祝福")
+
+
+def test_minus1_at_from_zero_raises_in_solver_directly():
+    # rules.py的load_rules本身會擋(from=0時fail不得為minus1), 但這裡刻意
+    # 直接建構RefineStep物件呼叫solve_refine, 繞過load_rules的驗證, 驗證
+    # 求解器本身也要有防護 —不能只依賴上游rules.py把關, 否則k==0時
+    # matrix[k][k-1]會用Python負索引悄悄wrap到最後一欄, 算出錯誤答案卻
+    # 完全不拋例外(review findings第1項)。
+    steps = [_step(0, 1, "X", 1, "1/2", "minus1")]
+    with pytest.raises(ValueError, match="minus1"):
+        solve_refine(steps, target=1, blessing_item="祝福")
+
+
+def test_invalid_start_equal_target_raises():
+    steps = [_step(0, 1, "X", 1, "1", "safe")]
+    with pytest.raises(ValueError):
+        solve_refine(steps, target=1, blessing_item="祝福", start=1)
 
 
 # ---------------------------------------------------------------------------
@@ -208,3 +225,85 @@ def test_shadow_armor_zeny_fee_zero_to_9():
 
     assert result.zeny_fee == Fraction(2500000)
     assert isinstance(result, RefineExpectation)
+
+
+# ---------------------------------------------------------------------------
+# solve_grade_path升階鏈損毀模型(review findings第2項): 最終精煉段含break階時,
+# 每次爆件要重跑整條升階鏈G, 不是只補一個素體
+# ---------------------------------------------------------------------------
+
+
+def _synthetic_break_final_leg_rules() -> CostRules:
+    # 精煉表T: 0→1 safe(材料m1), 1→2 break rate1/2(材料m2)
+    refine_table = [
+        _step(0, 1, "m1", 1, "1", "safe"),
+        _step(1, 2, "m2", 1, "1/2", "break"),
+    ]
+    # 升階none→D: refine_req=1(即0→1這段, 恰好是safe, 不會爆件),
+    # rate1/2, 升階寶石g×1, 手續費100
+    grade_step = GradeStep(
+        from_grade="none",
+        to_grade="D",
+        refine_req=1,
+        rate=Fraction(1, 2),
+        materials=(("g", 1),),
+        fee=100,
+    )
+    return CostRules(
+        refine_tables={"T": refine_table},
+        table_displays={"T": "T"},
+        blessing_item="祝福",
+        grade_steps=[grade_step],
+        exchange_recipes={},
+    )
+
+
+def test_solve_grade_path_break_in_final_leg_replicates_whole_chain():
+    # 手算(見task-4-report.md「fix 2」段落完整推導):
+    # G(升階鏈, 0→refine_req=1的m1材料 + 升階寶石g/手續費fee, 皆按1/p放大):
+    #   G_materials = {'m1': 1}(0→1 safe, 恰1次)
+    #   G_zeny_fee = 0
+    #   G_grade_materials = {'g': 1/(1/2) = 2}
+    #   G_grade_fee = 100/(1/2) = 200
+    # final_exp = solve_refine(T, target=2, ...): 手算聯立方程式(見報告)
+    #   解得 E0(m1)=2, E0(m2)=2, E0(body)=1 → body_count=2 → R=1
+    # scale = 1+R = 2
+    # materials_total = scale*G_materials + final_exp.materials
+    #   m1: 2*1 + 2 = 4;  m2: 0 + 2 = 2
+    # zeny_fee_total = scale*0 + 0 = 0
+    # grade_materials_total = scale*{'g':2} = {'g':4}
+    # grade_fee_total = scale*200 = 400
+    # body_count = scale = 2
+    rules = _synthetic_break_final_leg_rules()
+    result = solve_grade_path(rules, "T", "none", "D", final_refine=2)
+
+    assert result.materials["m1"] == Fraction(4)
+    assert result.materials["m2"] == Fraction(2)
+    assert result.zeny_fee == Fraction(0)
+    assert result.grade_materials["g"] == Fraction(4)
+    assert result.grade_fee == Fraction(400)
+    assert result.body_count == Fraction(2)
+
+
+def test_solve_grade_path_break_in_grade_leg_raises():
+    # 升階段落自己的0→refine_req精煉如果含break, 這個線性放大簡化模型
+    # 不成立(素體重來的成本會疊代性地卷進更早的升階段落), 必須直接拋
+    # ValueError, 不能算出一個看似合理但實際上錯誤的數字。
+    refine_table = [_step(0, 1, "m", 1, "1/2", "break")]
+    grade_step = GradeStep(
+        from_grade="none",
+        to_grade="D",
+        refine_req=1,
+        rate=Fraction(1, 2),
+        materials=(("g", 1),),
+        fee=0,
+    )
+    rules = CostRules(
+        refine_tables={"T2": refine_table},
+        table_displays={"T2": "T2"},
+        blessing_item="祝福",
+        grade_steps=[grade_step],
+        exchange_recipes={},
+    )
+    with pytest.raises(ValueError, match="爆件"):
+        solve_grade_path(rules, "T2", "none", "D", final_refine=1)

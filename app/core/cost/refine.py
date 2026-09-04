@@ -40,6 +40,41 @@ spec §12假設2, 所以升階失敗不必重新精煉, 只有升階寶石/手�
 (含)鏈上每一階, 疊加(精煉0→refine_req的solve_refine結果) + (該階升階材料
 qty/p, 手續費fee/p); 最後鏈路走完後, 再疊加一次精煉0→final_refine
 (因爲升階成功後拿到的是全新的、尚未精煉的下一階裝備)。
+
+**升階鏈損毀模型(controller ruling, task-4修復案)**: 上面「疊加一次
+0→final_refine」這句話在final_refine段落本身完全不會爆件(所有四個
+user-ratified基準皆屬此類)時是對的; 但若final_refine段落含break階
+(例如乙太系14級以後), 每次爆件毀掉的不是一個「素體」, 而是一個「已經
+整條升階鏈跑完、精煉到refine_req、且已成功升階到grade_to」的完整裝備 —
+要補回這個狀態, 得把grade_from→grade_to整條鏈(所有精煉段+所有升階寶石/
+手續費)重跑一次, 不能只補一個素體材料了事(舊版實作犯的正是這個錯:
+只把final_exp.body_count-1當「額外素體」加總, 完全沒有把升階鏈的成本
+一起複製)。
+
+正確模型: 令 G = 整條升階鏈(grade_from到grade_to, 不含最終精煉段)的
+期望成本向量, 即所有升階段落「0→refine_req」精煉的materials/zeny_fee
+加總, 加上所有段落的升階寶石(qty/p)/手續費(fee/p)加總。這裡要求每個
+升階段落自己的body_count都必須恰為1(即該段refine_req以內完全沒有
+break階) — 這是這個「損毀=重跑整條G」簡化模型能成立的前提, 若不成立
+(某個升階段落自己也會爆件, 導致「還沒升階成功前」就要重新素體來過,
+那個素體重來的成本又會疊代性地卷進更早的升階段落, 不再是簡單的線性
+scale) 就直接拋ValueError, 不要算出一個看似合理但實際上錯誤的數字。
+
+令 final_exp = solve_refine(refine_table, final_refine, ...)(最終精煉段
+本身的標準單腿模型, 包含它自己內部的break重試遞迴), R = final_exp.
+body_count - 1 (最終精煉段爆件導致「需要一整套全新已升階裝備」的期望
+次數)。因爲每次爆件都要整條G重來, 而最初攻頂final_refine前也要先跑
+一次G, 所以G的成分要乘上 (1+R) 倍; 而final_exp自己的materials/zeny_fee
+不必再乘任何倍數 — 它是用標準的break遞迴模型解出來的E[0], 內部的
+「失敗回到E[0]重來」遞迴本身就已經把「這一段(0→final_refine)材料被
+重複消耗的次數期望值」算對了, 只是原本模型裡「回到E[0]重來」預設的
+代價是「一個素體」, 現在改成「一次G」而已 — 所以只需要把body欄位的
+語意換成G的整條成本, 乘上(1+R)倍, 再加上final_exp自己(0→final_refine)
+的materials/zeny_fee即可, 不會出現雙重計算。
+
+回歸檢查: 若final_refine段落完全沒有break階(四個user-ratified基準皆
+如此), R恆為0, (1+R)=1, 算出來的結果跟舊版「G + final_exp」完全相同
+(浮點/Fraction逐位不變) — 四個基準測試因此維持原樣不動。
 """
 
 from __future__ import annotations
@@ -68,9 +103,12 @@ class RefineExpectation2(RefineExpectation):
 def _solve_linear_system(
     matrix: list[list[Fraction]], rhs_columns: list[list[Fraction]]
 ) -> list[list[Fraction]]:
-    """高斯-喬丹消去(全程Fraction, partial pivot=往下找第一個非零列), 一次解出
-    matrix @ X = rhs_columns(逐欄)的所有欄位, 回傳與rhs_columns同形狀的解欄位
-    list。用增廣矩陣一次處理全部RHS欄位, 避免對同一個係數矩陣重複消去。
+    """高斯-喬丹消去(全程Fraction, 選主元的方式是從當前行往下找首個非零列即可
+    停手 — 不是classic partial pivoting那種挑「絕對值最大」的元素, 因為
+    Fraction精確運算沒有浮點的數值穩定性問題, 不需要靠挑大主元來壓低誤差,
+    找得到非零列就能保證消去合法), 一次解出matrix @ X = rhs_columns(逐欄)的
+    所有欄位, 回傳與rhs_columns同形狀的解欄位list。用增廣矩陣一次處理全部
+    RHS欄位, 避免對同一個係數矩陣重複消去。
     """
     n = len(matrix)
     m = len(rhs_columns)
@@ -100,6 +138,11 @@ def solve_refine(
 
     steps 只需要涵蓋 from_lv 0..target-1 這段(允許傳整張表, 多餘的高階step會被
     忽略); 缺任何一階(斷鏈)一律拋ValueError, 不默默用0頂替。
+
+    start合法範圍是[0,target), 刻意不含target本身 — target這個等級依定義
+    就是E[target]=0的邊界(已經達成目標, 不必再解), 不是一個「還在半路上」
+    需要求解花費的狀態; 呼叫端若真的想問「已經在target時的期望花費」,
+    答案恆為0, 用不到這支函式, 所以沒有把start==target也算進合法範圍。
     """
     if target <= 0:
         raise ValueError(f"target必須為正整數, 得到{target}")
@@ -143,6 +186,17 @@ def solve_refine(
                 matrix[k][k + 1] -= Fraction(1)
             multiplier = Fraction(1)
         elif s.fail == "minus1":
+            if k == 0:
+                # rules.py的_parse_refine_table已經擋掉from_lv=0時fail=minus1
+                # 的情況, 但這支函式接受直接建構的RefineStep list(不見得經過
+                # load_rules驗證) — 若在這裡沒有自己的防護, k==0時
+                # matrix[k][k-1]會用Python負索引悄悄wrap到最後一欄
+                # (matrix[0][-1]), 得到一個看似正常、實際上完全錯誤的解,
+                # 且不會拋任何例外, 非常危險, 必須自己擋。
+                raise ValueError(
+                    f"精煉表from_lv=0的階段不可為minus1(等級0沒有更低一階可退), "
+                    f"傳入的RefineStep可能繞過了rules.py的load_rules驗證"
+                )
             if k + 1 < n:
                 matrix[k][k + 1] -= p
             matrix[k][k - 1] -= Fraction(1) - p
@@ -216,31 +270,46 @@ def solve_grade_path(
 
     refine_table = rules.refine_tables[table_key]
 
-    materials_total: dict[str, Fraction] = {}
-    zeny_fee_total = Fraction(0)
-    body_extra_total = Fraction(0)
-    grade_materials_total: dict[str, Fraction] = {}
-    grade_fee_total = Fraction(0)
+    # G = 整條升階鏈(grade_from到grade_to, 不含最終精煉段)的期望成本向量。
+    g_materials: dict[str, Fraction] = {}
+    g_zeny_fee = Fraction(0)
+    g_grade_materials: dict[str, Fraction] = {}
+    g_grade_fee = Fraction(0)
 
     for gs in chain:
         refine_exp = solve_refine(refine_table, gs.refine_req, rules.blessing_item)
-        _merge_into(materials_total, refine_exp.materials)
-        zeny_fee_total += refine_exp.zeny_fee
-        body_extra_total += refine_exp.body_count - 1
+        if refine_exp.body_count != Fraction(1):
+            raise ValueError(
+                f"精煉表「{table_key}」在{gs.from_grade}→{gs.to_grade}階要求的"
+                f"0→{gs.refine_req}精煉段內存在爆件(break)風險"
+                f"(body_count={refine_exp.body_count} != 1), 升階鏈損毀模型"
+                f"假設升階前的精煉段不會爆件才能用「整條鏈線性放大」簡化計算,"
+                f"此表不符合這個前提, 不支援用於升階路徑計算"
+            )
+        _merge_into(g_materials, refine_exp.materials)
+        g_zeny_fee += refine_exp.zeny_fee
 
         inv_p = Fraction(1) / gs.rate
         for name, qty in gs.materials:
-            grade_materials_total[name] = grade_materials_total.get(name, Fraction(0)) + Fraction(qty) * inv_p
-        grade_fee_total += Fraction(gs.fee) * inv_p
+            g_grade_materials[name] = g_grade_materials.get(name, Fraction(0)) + Fraction(qty) * inv_p
+        g_grade_fee += Fraction(gs.fee) * inv_p
 
+    # 最終精煉段(升階成功後, 全新裝備從0精煉到final_refine)自己的標準單腿
+    # 模型, 內含它自己的break重試遞迴。R=最終精煉段爆件導致「需要一整套
+    # 全新已升階裝備(重跑整條G)」的期望次數。
     final_exp = solve_refine(refine_table, final_refine, rules.blessing_item)
+    replacement_cycles = final_exp.body_count - 1
+    scale = Fraction(1) + replacement_cycles  # 1(最初攻頂前跑一次G) + R(每次爆件補跑一次G)
+
+    materials_total = {name: qty * scale for name, qty in g_materials.items()}
     _merge_into(materials_total, final_exp.materials)
-    zeny_fee_total += final_exp.zeny_fee
-    body_extra_total += final_exp.body_count - 1
+    zeny_fee_total = g_zeny_fee * scale + final_exp.zeny_fee
+    grade_materials_total = {name: qty * scale for name, qty in g_grade_materials.items()}
+    grade_fee_total = g_grade_fee * scale
 
     return RefineExpectation2(
         materials=materials_total,
-        body_count=body_extra_total + 1,
+        body_count=scale,
         zeny_fee=zeny_fee_total,
         grade_materials=grade_materials_total,
         grade_fee=grade_fee_total,
