@@ -11,8 +11,8 @@
         "refine_from": 0,
         "grade_from": "none",
         "refine_table": "ether_armor2",
-        "enchant_strategy": "last_slot_only",
-        "enchant_goal": [1, "Star_Cluster_Of_Wis3"]
+        "enchant_strategy": "stop_when_hit",
+        "enchant_goal": [3, "Inteligence5"]
       }
     }
   }

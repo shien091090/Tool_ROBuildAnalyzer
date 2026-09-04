@@ -18,6 +18,11 @@ from app.core.build import Build, CostTargets, SlotConfig, load_build
 from app.core.cost.report import evaluate_build_cost
 from app.core.cost.rules import load_prices, load_rules
 from app.core.db_reader import DbReader
+
+# _load_manual_enchants目前只活在app.cli(cli.py本身也沒有更公開的loader可用,
+# 見task-8 report) — 這裡借用它純粹是為了跟CLI實際跑的路徑一致, 若之後
+# app.core.cost底下長出一個公開的load_manual_enchants(), 這裡應該遷移過去,
+# 不要繼續依賴cli.py的私有函式。
 from app.cli import _load_manual_enchants
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -34,11 +39,13 @@ def _load_live_inputs():
 
 
 def test_sample_a_cost_runs_clean_with_positive_zeny_and_expected_rounds():
-    """sample_a(450263, refine0→13, grade none→A, enchant目標slot1
-    Star_Cluster_Of_Wis3)用真實DB+活的userdata規則/物價跑evaluate_build_cost
-    不拋例外, armor格zeny_total>0(精煉/升階/兌換手續費本身就會遠大於0,
-    即使部分材料無價格記為0), 附魔期望輪數(N=1/p)>1(隨機附魔本來就不是
-    一次到位, 見report「附魔目標slot1的Wis3權重2000/總權重500000, N=250」)。
+    """sample_a(450263, refine0→13, grade none→A, enchant目標slot3
+    Inteligence5 — 沿用enchants陣列裡實際記錄的詞條, 不捏造無關目標, 見
+    controller ruling task-8 fix)用真實DB+活的userdata規則/物價跑
+    evaluate_build_cost不拋例外, armor格zeny_total>0(精煉/升階/兌換手續費
+    本身就會遠大於0, 即使部分材料無價格記為0), 附魔期望輪數(N=1/p)>1
+    (隨機附魔本來就不是一次到位, 見report「附魔目標slot3的Inteligence5權重
+    4500/總權重500000, N=1000/9≈111.11」)。
     """
     rules, prices, manual = _load_live_inputs()
     build = load_build(_REPO_ROOT / "userdata" / "builds" / "sample_a.json")
@@ -58,8 +65,8 @@ def test_sample_a_cost_runs_clean_with_positive_zeny_and_expected_rounds():
         from app.core.cost import enchant as enchant_module
 
         enchant_result = enchant_module.solve_enchant(
-            reader, manual, "Lunar_E_Armor_LT", 1, "Star_Cluster_Of_Wis3",
-            "last_slot_only", prices,
+            reader, manual, "Lunar_E_Armor_LT", 3, "Inteligence5",
+            "stop_when_hit", prices,
         )
     assert enchant_result.available
     assert enchant_result.expected_rounds > 1
