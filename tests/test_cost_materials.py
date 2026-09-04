@@ -67,6 +67,18 @@ def test_expand_self_cycle_detection_raises():
         expand({"A": Fraction(1)}, cyclic_recipes)
 
 
+def test_expand_three_node_cycle_message_is_ordered():
+    # A→B→C→A: 訊息必須照實際走訪順序組字串(不能對 set 迭代, 順序不保證)。
+    cyclic_recipes = {
+        "A": ([("B", 1)], 10),
+        "B": ([("C", 1)], 10),
+        "C": ([("A", 1)], 10),
+    }
+    with pytest.raises(ValueError) as exc_info:
+        expand({"A": Fraction(1)}, cyclic_recipes)
+    assert "A → B → C → A" in str(exc_info.value)
+
+
 def test_expand_diamond_shape_not_flagged_as_cycle():
     # C 被 A 跟 B 兩條路徑各自需要, 不是循環, 應正常展開並加總。
     recipes = {

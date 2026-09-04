@@ -201,7 +201,97 @@ def test_invalid_exchange_recipe_negative_fee_raises(tmp_path):
     data = _minimal_rules_dict()
     data["exchange_recipes"]["兌換品"]["fee"] = -1
     path = _write_rules(tmp_path, data)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="fee不得為負數"):
+        load_rules(path)
+
+
+def test_invalid_grade_step_negative_fee_message_fragment(tmp_path):
+    data = _minimal_rules_dict()
+    data["grade_steps"][0]["fee"] = -100
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="fee不得為負數"):
+        load_rules(path)
+
+
+def test_invalid_refine_step_zero_qty_raises(tmp_path):
+    data = _minimal_rules_dict()
+    data["refine_tables"]["t1"]["steps"][0]["qty"] = 0
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="數量必須為正整數"):
+        load_rules(path)
+
+
+def test_invalid_refine_step_negative_qty_raises(tmp_path):
+    data = _minimal_rules_dict()
+    data["refine_tables"]["t1"]["steps"][1]["qty"] = -3
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="數量必須為正整數"):
+        load_rules(path)
+
+
+def test_invalid_grade_chain_discontinuity_raises(tmp_path):
+    data = _minimal_rules_dict()
+    # 第一階 none→D, 接著再補一階「from=C」(應為D才連續) → 階級不連續。
+    data["grade_steps"].append(
+        {
+            "from": "C",
+            "to": "B",
+            "refine_req": 11,
+            "rate": "0.5",
+            "materials": [{"name": "寶石2", "qty": 5}],
+            "fee": 100000,
+        }
+    )
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="階級不連續"):
+        load_rules(path)
+
+
+def test_invalid_grade_step_zero_material_qty_raises(tmp_path):
+    data = _minimal_rules_dict()
+    data["grade_steps"][0]["materials"][0]["qty"] = 0
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="數量必須為正整數"):
+        load_rules(path)
+
+
+def test_invalid_grade_step_negative_material_qty_raises(tmp_path):
+    data = _minimal_rules_dict()
+    data["grade_steps"][0]["materials"][0]["qty"] = -5
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="數量必須為正整數"):
+        load_rules(path)
+
+
+def test_invalid_exchange_recipe_zero_input_qty_raises(tmp_path):
+    data = _minimal_rules_dict()
+    data["exchange_recipes"]["兌換品"]["inputs"][0]["qty"] = 0
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="數量必須為正整數"):
+        load_rules(path)
+
+
+def test_invalid_exchange_recipe_negative_input_qty_raises(tmp_path):
+    data = _minimal_rules_dict()
+    data["exchange_recipes"]["兌換品"]["inputs"][0]["qty"] = -2
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="數量必須為正整數"):
+        load_rules(path)
+
+
+def test_invalid_fee_malformed_raises(tmp_path):
+    data = _minimal_rules_dict()
+    data["refine_tables"]["t1"]["steps"][0]["fee"] = "not-a-number"
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="格式錯誤"):
+        load_rules(path)
+
+
+def test_missing_required_field_raises_valueerror_not_keyerror(tmp_path):
+    data = _minimal_rules_dict()
+    del data["refine_tables"]["t1"]["steps"][0]["rate"]
+    path = _write_rules(tmp_path, data)
+    with pytest.raises(ValueError, match="缺少必要欄位"):
         load_rules(path)
 
 

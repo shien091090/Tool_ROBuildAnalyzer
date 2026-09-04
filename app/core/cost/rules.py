@@ -9,6 +9,16 @@ RefineStep 列表(已依 from_lv 排序 — json 本身已是遞增順序, 這�
 
 驗證失敗一律拋 ValueError, 訊息帶表名/階級, 方便使用者定位是哪張表哪一階
 的資料錯了 — 不靜默丟棄或用預設值蓋過去(spec 對「不默默」的一貫要求)。
+這包含「必要欄位缺漏」: 所有必要欄位一律透過 `_require()` 存取, 缺漏時
+拋 ValueError(而不是讓 dict[...] 直接冒出 KeyError) —
+選擇這個作法(而非在文件裡改口承認缺漏key會是KeyError), 是因為呼叫端
+(cli/UI層)只需要 catch 單一例外型別就能把「格式錯」「值不合法」「缺欄位」
+三種壞資料一視同仁地攔下來顯示訊息, 不用另外處理 KeyError。
+例外: 頂層四個集合鍵(refine_tables/grade_steps/exchange_recipes)若整個
+不存在, 視為「空表」而非錯誤(用 `data.get(key, {})`/`data.get(key, [])`),
+因為缺一整張表在語意上等同「這個規則檔目前沒有登記這種資料」, 跟「某筆
+資料裡缺了必要欄位」是不同層級的問題; 只有 blessing_item 是純量必要欄位,
+缺漏一樣算錯誤。
 """
 
 import json
@@ -17,6 +27,13 @@ from fractions import Fraction
 from pathlib import Path
 
 FAIL_VALUES = frozenset({"safe", "minus1", "stay", "break"})
+
+
+def _require(mapping: dict, key: str, context: str):
+    """存取必要欄位; 缺漏時拋 ValueError(而非讓dict[key]冒出KeyError)。"""
+    if key not in mapping:
+        raise ValueError(f"{context}: 缺少必要欄位「{key}」")
+    return mapping[key]
 
 
 @dataclass(frozen=True)
@@ -67,18 +84,29 @@ def _parse_fail(raw, context: str) -> str:
 
 
 def _parse_fee(raw, context: str) -> int:
-    fee = int(raw)
+    try:
+        fee = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{context}: fee「{raw}」格式錯誤, 須為整數") from exc
     if fee < 0:
         raise ValueError(f"{context}: fee不得為負數, 得到{fee}")
     return fee
+
+
+def _parse_positive_qty(raw, material_name: str, context: str) -> int:
+    qty = int(raw)
+    if qty < 1:
+        raise ValueError(f"{context}: 材料「{material_name}」數量必須為正整數, 得到{qty}")
+    return qty
 
 
 def _parse_refine_table(table_name: str, raw_table: dict) -> list[RefineStep]:
     steps: list[RefineStep] = []
     prev_to_lv: int | None = None
     for idx, raw_step in enumerate(raw_table.get("steps", [])):
-        from_lv = int(raw_step["from"])
-        to_lv = int(raw_step["to"])
+        coarse_context = f"精煉表「{table_name}」第{idx + 1}階"
+        from_lv = int(_require(raw_step, "from", coarse_context))
+        to_lv = int(_require(raw_step, "to", coarse_context))
         context = f"精煉表「{table_name}」第{idx + 1}階({from_lv}→{to_lv})"
 
         if to_lv != from_lv + 1:
@@ -86,8 +114,10 @@ def _parse_refine_table(table_name: str, raw_table: dict) -> list[RefineStep]:
         if prev_to_lv is not None and from_lv != prev_to_lv:
             raise ValueError(f"{context}: 階級不連續, from必須等於前一階的to({prev_to_lv})")
 
-        rate = _parse_rate(raw_step["rate"], context)
-        fail = _parse_fail(raw_step["fail"], context)
+        material = _require(raw_step, "material", context)
+        qty = _parse_positive_qty(_require(raw_step, "qty", context), material, context)
+        rate = _parse_rate(_require(raw_step, "rate", context), context)
+        fail = _parse_fail(_require(raw_step, "fail", context), context)
         if from_lv == 0 and fail == "minus1":
             raise ValueError(f"{context}: from=0時fail不得為minus1(沒有更低階可退)")
         fee = _parse_fee(raw_step.get("fee", 0), context)
@@ -96,11 +126,11 @@ def _parse_refine_table(table_name: str, raw_table: dict) -> list[RefineStep]:
             RefineStep(
                 from_lv=from_lv,
                 to_lv=to_lv,
-                material=raw_step["material"],
-                qty=int(raw_step["qty"]),
+                material=material,
+                qty=qty,
                 rate=rate,
                 fail=fail,
-                blessing=int(raw_step["blessing"]),
+                blessing=int(_require(raw_step, "blessing", context)),
                 fee=fee,
             )
         )
@@ -112,27 +142,28 @@ def _parse_grade_steps(raw_steps: list) -> list[GradeStep]:
     steps: list[GradeStep] = []
     prev_to_grade: str | None = None
     for idx, raw_step in enumerate(raw_steps):
-        from_grade = raw_step["from"]
-        to_grade = raw_step["to"]
+        coarse_context = f"升階表第{idx + 1}階"
+        from_grade = _require(raw_step, "from", coarse_context)
+        to_grade = _require(raw_step, "to", coarse_context)
         context = f"升階表第{idx + 1}階({from_grade}→{to_grade})"
 
         if prev_to_grade is not None and from_grade != prev_to_grade:
             raise ValueError(f"{context}: 階級不連續, from必須等於前一階的to({prev_to_grade})")
 
-        rate = _parse_rate(raw_step["rate"], context)
+        rate = _parse_rate(_require(raw_step, "rate", context), context)
         fee = _parse_fee(raw_step.get("fee", 0), context)
-        materials = tuple(
-            (m["name"], int(m["qty"])) for m in raw_step.get("materials", [])
-        )
-        for name, qty in materials:
-            if qty <= 0:
-                raise ValueError(f"{context}: 材料「{name}」數量必須為正整數, 得到{qty}")
+        materials = []
+        for m in raw_step.get("materials", []):
+            m_name = _require(m, "name", context)
+            m_qty = _parse_positive_qty(_require(m, "qty", context), m_name, context)
+            materials.append((m_name, m_qty))
+        materials = tuple(materials)
 
         steps.append(
             GradeStep(
                 from_grade=from_grade,
                 to_grade=to_grade,
-                refine_req=int(raw_step["refine_req"]),
+                refine_req=int(_require(raw_step, "refine_req", context)),
                 rate=rate,
                 materials=materials,
                 fee=fee,
@@ -149,10 +180,9 @@ def _parse_exchange_recipes(raw_recipes: dict) -> dict[str, tuple[list[tuple[str
         fee = _parse_fee(raw_recipe.get("fee", 0), context)
         inputs: list[tuple[str, int]] = []
         for raw_input in raw_recipe.get("inputs", []):
-            qty = int(raw_input["qty"])
-            if qty <= 0:
-                raise ValueError(f"{context}: 材料「{raw_input['name']}」數量必須為正整數, 得到{qty}")
-            inputs.append((raw_input["name"], qty))
+            input_name = _require(raw_input, "name", context)
+            qty = _parse_positive_qty(_require(raw_input, "qty", context), input_name, context)
+            inputs.append((input_name, qty))
         recipes[name] = (inputs, fee)
     return recipes
 
@@ -170,7 +200,7 @@ def load_rules(path: str = "userdata/refine_rules.json") -> CostRules:
     return CostRules(
         refine_tables=refine_tables,
         table_displays=table_displays,
-        blessing_item=data["blessing_item"],
+        blessing_item=_require(data, "blessing_item", "規則檔根層"),
         grade_steps=_parse_grade_steps(data.get("grade_steps", [])),
         exchange_recipes=_parse_exchange_recipes(data.get("exchange_recipes", {})),
     )
