@@ -1,0 +1,7 @@
+{
+  "_comment": "手動附魔資料, 供app/core/cost/enchant.py:solve_enchant()查詢, spec M3 §7.5。schema: reset_rules(dict, key=table_index的字串或item的internal_name, table_index優先比對; value={\"rate\": \"0.8\"(字串, 直接餵給Fraction()), \"zeny\": int, \"materials\": [{\"name\": internal_name, \"qty\": int}, ...]}, 代表「全slot歸零重來」這個動作的成功率與每次嘗試的固定費用, 查無此key時引擎會警告「無重置規則, 以免費重置計」並以0計, 不會默默假設); manual_tables(list, 每列schema同enchant_tables資料表的一列: {\"table_index\": int, \"target_internal_names\": [item internal_name, ...], \"slot_index\": int, \"require_cost\": require_cost格式字串或null, \"success_rate\": int, \"option_internal_name\": str, \"option_weight\": int}, 給查無自動附魔表的舊式NPC附魔裝備fallback用, 用到哪件建哪件); targeted(list, 每列{\"item\": internal_name, \"slot_index\": int, \"option\": internal_name, \"zeny\": int, \"materials\": [{\"name\": internal_name, \"qty\": int}, ...]}, 代表「指定附魔」這種不靠隨機、固定花費就能拿到特定詞條的路線, 引擎算完隨機期望後會用同一組prices折算成zeny跟這筆固定成本比價, 嚴格更便宜才採用); upgrade_chains(list, schema保留, M3只讀取判斷「是否涉及本次查詢的目標option」並警告「升級鏈暫不比價」不實作比價演算法(YAGNI, spec允許後補) — 目前預期形狀為{\"item\": internal_name, \"slot_index\": int, \"options\": [依升級順序排列的內部名, 例如星團Lv1→Lv2→Lv3]}, 之後真的要實作多階指定附魔升級比價時再擴充讀取邏輯, 不需要改這裡的資料形狀)。",
+  "reset_rules": {},
+  "manual_tables": [],
+  "targeted": [],
+  "upgrade_chains": []
+}

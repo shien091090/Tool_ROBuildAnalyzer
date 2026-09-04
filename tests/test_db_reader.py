@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from importer import db
-from app.core.db_reader import DbReader, ItemRecord
+from app.core.db_reader import DbReader, EnchantRow, ItemRecord
 
 
 def _setup_db(tmp_path):
@@ -74,6 +74,51 @@ def _setup_db(tmp_path):
         [
             {"skill_id": 2336, "internal_name": "SR_KNUCKLEARROW", "skill_name": "拳刃箭矢"},
             {"skill_id": 2335, "internal_name": "SR_LIGHTNINGWALK", "skill_name": "電光步"},
+        ],
+    )
+
+    # Insert test enchant rows: table 1 = target item, table 2 = unrelated
+    # item(用來驗證LIKE比對不會誤命中), 且slot 3同一option故意重複出現兩次
+    # (模擬真實資料源本身的重複列, 讀取層不可自作主張去重)。
+    db.insert_enchants(
+        conn,
+        [
+            {
+                "table_index": 1,
+                "target_internal_names": ["Lunar_E_Armor_LT"],
+                "slot_index": 3,
+                "require_cost": '1000, {"Mat_A", 2}',
+                "success_rate": 100000,
+                "option_internal_name": "OptA",
+                "option_weight": 100,
+            },
+            {
+                "table_index": 1,
+                "target_internal_names": ["Lunar_E_Armor_LT"],
+                "slot_index": 3,
+                "require_cost": '1000, {"Mat_A", 2}',
+                "success_rate": 100000,
+                "option_internal_name": "OptA",
+                "option_weight": 100,
+            },
+            {
+                "table_index": 1,
+                "target_internal_names": ["Lunar_E_Armor_LT"],
+                "slot_index": 1,
+                "require_cost": "500",
+                "success_rate": 100000,
+                "option_internal_name": "OptB",
+                "option_weight": 50,
+            },
+            {
+                "table_index": 2,
+                "target_internal_names": ["Another_Armor"],
+                "slot_index": 1,
+                "require_cost": "999",
+                "success_rate": 100000,
+                "option_internal_name": "OptC",
+                "option_weight": 1,
+            },
         ],
     )
 
@@ -260,3 +305,52 @@ def test_close_method(tmp_path):
         assert False, "Expected an error after close"
     except sqlite3.ProgrammingError:
         pass  # Expected
+
+
+def test_enchant_table_for_item_hit(tmp_path):
+    """Test resolving an item's enchant table_index via target_internal_names."""
+    db_path = _setup_db(tmp_path)
+    reader = DbReader(db_path)
+
+    assert reader.enchant_table_for_item("Lunar_E_Armor_LT") == 1
+    assert reader.enchant_table_for_item("Another_Armor") == 2
+
+    reader.close()
+
+
+def test_enchant_table_for_item_miss(tmp_path):
+    """Test that an item not present in any table's target list returns None."""
+    db_path = _setup_db(tmp_path)
+    reader = DbReader(db_path)
+
+    assert reader.enchant_table_for_item("No_Such_Item") is None
+
+    reader.close()
+
+
+def test_enchant_rows_ordered_by_slot_desc_and_not_deduped(tmp_path):
+    """Test that enchant_rows returns slot_index descending and keeps duplicate
+    rows as-is(分母資料驅動需要看到原始重複列, 不能被讀取層去重)."""
+    db_path = _setup_db(tmp_path)
+    reader = DbReader(db_path)
+
+    rows = reader.enchant_rows(1)
+    assert [r.slot_index for r in rows] == [3, 3, 1]
+    assert rows[0] == EnchantRow(
+        slot_index=3, require_cost='1000, {"Mat_A", 2}', option_internal_name="OptA", option_weight=100
+    )
+    assert rows[2] == EnchantRow(
+        slot_index=1, require_cost="500", option_internal_name="OptB", option_weight=50
+    )
+
+    reader.close()
+
+
+def test_enchant_rows_unknown_table_returns_empty(tmp_path):
+    """Test that a table_index with no rows returns an empty list, not an error."""
+    db_path = _setup_db(tmp_path)
+    reader = DbReader(db_path)
+
+    assert reader.enchant_rows(999) == []
+
+    reader.close()
