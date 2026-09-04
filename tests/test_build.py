@@ -55,7 +55,10 @@ def test_grade_levels():
 
 
 def _spec_build_json():
-    # spec §6 sample (docs/superpowers/specs/2026-09-03-robuildanalyzer-design.md)
+    # spec §6 sample (docs/superpowers/specs/2026-09-03-robuildanalyzer-design.md),
+    # kept in sync with the doc's json block verbatim (incl. refine_table/
+    # enchant_goal — C1c changed refine_table to "ether_armor2", since item
+    # 450263 is an ether lv2 armor, not an armor_lv1 one).
     return {
         "name": "PD向物理配置",
         "slots": {
@@ -68,7 +71,9 @@ def _spec_build_json():
                 "cost_targets": {
                     "refine_from": 0,
                     "grade_from": "none",
+                    "refine_table": "ether_armor2",
                     "enchant_strategy": "last_slot_only",
+                    "enchant_goal": [1, "Star_Cluster_Of_Pow3"],
                 },
             }
         },
@@ -90,8 +95,8 @@ def test_load_build_roundtrip_spec_sample(tmp_path):
     assert slot.cards == [4140]
     assert slot.enchants == ["Star_Cluster_Of_Pow3", "Wolf_Orb_Str_2", None]
     assert slot.cost_targets == CostTargets(
-        refine_from=0, grade_from="none", refine_table=None,
-        enchant_strategy="last_slot_only", enchant_goal=None,
+        refine_from=0, grade_from="none", refine_table="ether_armor2",
+        enchant_strategy="last_slot_only", enchant_goal=(1, "Star_Cluster_Of_Pow3"),
     )
 
 

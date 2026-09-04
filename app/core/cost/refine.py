@@ -82,6 +82,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from fractions import Fraction
 
+from app.core.cost.materials import merge_into
 from app.core.cost.rules import CostRules, RefineStep
 
 GRADE_ORDER = ["none", "D", "C", "B", "A"]
@@ -230,11 +231,6 @@ def solve_refine(
     return RefineExpectation(materials=materials_result, body_count=body_count, zeny_fee=zeny_fee)
 
 
-def _merge_into(target: dict[str, Fraction], source: dict[str, Fraction]) -> None:
-    for name, qty in source.items():
-        target[name] = target.get(name, Fraction(0)) + qty
-
-
 def solve_grade_path(
     rules: CostRules,
     table_key: str,
@@ -247,7 +243,17 @@ def solve_grade_path(
     grade_from=="none"且grade_to=="none"這種純精煉情境不歸這個函式管(呼叫端
     應直接用solve_refine) — 這裡grade_to必須在GRADE_ORDER鏈上嚴格排在
     grade_from之後, 否則(含兩者相同的情況)一律拋ValueError。
+
+    final_refine允許為0(controller ruling, M3 final review交辦C1b): 代表
+    「升階鏈跑完就好, 不用再往上精煉最終那件裝備」— solve_refine本身要求
+    target必須為正整數(target=0是「已達成、不必求解」的邊界, 見solve_refine
+    docstring), 所以這裡改成final_refine==0時直接略過「最終精煉段」這一次
+    solve_refine呼叫(final_exp視為零成本、body_count=1, 即R=0、scale=1不變),
+    只保留升階鏈G本身(所有段落的0→refine_req精煉+升階寶石/手續費)——不是
+    連升階鏈都不算, 那樣就違背「升階路徑仍然要跑」的呼叫端語意了。
     """
+    if final_refine < 0:
+        raise ValueError(f"final_refine不得為負數, 得到{final_refine}")
     if grade_from not in GRADE_ORDER:
         raise ValueError(f"未知的起始階級: {grade_from}")
     if grade_to not in GRADE_ORDER:
@@ -286,7 +292,7 @@ def solve_grade_path(
                 f"假設升階前的精煉段不會爆件才能用「整條鏈線性放大」簡化計算,"
                 f"此表不符合這個前提, 不支援用於升階路徑計算"
             )
-        _merge_into(g_materials, refine_exp.materials)
+        merge_into(g_materials, refine_exp.materials)
         g_zeny_fee += refine_exp.zeny_fee
 
         inv_p = Fraction(1) / gs.rate
@@ -296,13 +302,17 @@ def solve_grade_path(
 
     # 最終精煉段(升階成功後, 全新裝備從0精煉到final_refine)自己的標準單腿
     # 模型, 內含它自己的break重試遞迴。R=最終精煉段爆件導致「需要一整套
-    # 全新已升階裝備(重跑整條G)」的期望次數。
-    final_exp = solve_refine(refine_table, final_refine, rules.blessing_item)
+    # 全新已升階裝備(重跑整條G)」的期望次數。final_refine==0(見上方docstring
+    # C1b說明)時這一段完全不存在, 視為零成本、body_count=1(R=0)。
+    if final_refine == 0:
+        final_exp = RefineExpectation(materials={}, body_count=Fraction(1), zeny_fee=Fraction(0))
+    else:
+        final_exp = solve_refine(refine_table, final_refine, rules.blessing_item)
     replacement_cycles = final_exp.body_count - 1
     scale = Fraction(1) + replacement_cycles  # 1(最初攻頂前跑一次G) + R(每次爆件補跑一次G)
 
     materials_total = {name: qty * scale for name, qty in g_materials.items()}
-    _merge_into(materials_total, final_exp.materials)
+    merge_into(materials_total, final_exp.materials)
     zeny_fee_total = g_zeny_fee * scale + final_exp.zeny_fee
     grade_materials_total = {name: qty * scale for name, qty in g_grade_materials.items()}
     grade_fee_total = g_grade_fee * scale

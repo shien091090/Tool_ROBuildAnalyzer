@@ -50,6 +50,28 @@ def test_load_rules_exchange_recipe_乙太魔石():
     assert fee == 100000
 
 
+def test_load_rules_exchange_recipe_高密度乙太礦石改名層():
+    # I1(M3 final review交辦): excel原始「乙太鈣礦石」/「乙太鈰鐳礦石」兩列的
+    # product名與礦石input名都缺"高密度"前綴, 對照ether_armor2表15級以後
+    # 真正消耗的材料名"高密度乙太鈣礦石"/"高密度乙太鈰鐳礦石"(由prices.json
+    # 已登記172,500的"高密度鈣礦石"/"高密度鈰鐳礦石"兌換而成, 不是單價0的
+    # "鈣礦石"/"鈰鐳礦石") — scripts/convert_refine_rules.py的_ETHER_ORE_RENAME
+    # 改名層修正這個落差, 這裡驗證改名後的json確實接上正確的input。
+    rules = load_rules(REAL_RULES_PATH)
+
+    ca_inputs, ca_fee = rules.exchange_recipes["高密度乙太鈣礦石"]
+    assert ca_inputs == [("乙太星塵", 3), ("高密度鈣礦石", 1)]
+    assert ca_fee == 50000
+
+    la_inputs, la_fee = rules.exchange_recipes["高密度乙太鈰鐳礦石"]
+    assert la_inputs == [("乙太星塵", 3), ("高密度鈰鐳礦石", 1)]
+    assert la_fee == 50000
+
+    # 舊的(未改名)product名不該再存在, 避免改名沒生效卻誤判成功。
+    assert "乙太鈣礦石" not in rules.exchange_recipes
+    assert "乙太鈰鐳礦石" not in rules.exchange_recipes
+
+
 def test_load_rules_table_displays():
     rules = load_rules(REAL_RULES_PATH)
     assert rules.table_displays["armor_lv1"] == "一級防具"

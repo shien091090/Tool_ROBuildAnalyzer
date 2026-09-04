@@ -32,6 +32,19 @@ refine_table名稱若不是CostRules.refine_tables裡的合法key: 這裡選擇e
 CostRules, 沒有能力判斷表名合不合法, 只有在報表層真正對照到規則表時才查得出
 來(跟rules.py「缺漏必要欄位一律ValueError, 不默默用0/None頂替」是同一種
 「不默默」哲學, 只是把檢查點挪到唯一有能力做這個檢查的地方)。
+
+**升階路徑優雅降級**(C1, M3 final review交辦): 不是每張精煉表都符合
+refine.solve_grade_path「升階前精煉段不可爆件」的簡化模型前提(見該函式
+docstring) — 表本身不支援升階路徑時solve_grade_path會拋ValueError, 這裡
+用try/except接住, 記警告「部位X升階成本無法計算(原因), 已略過」並把該格的
+精煉/升階成本略記為0(附魔評估不受影響, 繼續跑) — 不讓整支CLI因為某一格用
+了不支援升階的表就整個traceback。refine_table不存在於規則表(表名打錯,
+上面那段講的情況)仍然直接拋ValueError不降級, 兩者是不同性質的錯誤(表名
+打錯是設定錯誤, 表結構不支援升階是資料本身的限制)。
+
+grade分支若cost_targets.refine_from非0一律記警告並忽略它(I5) — 升階成功後
+精煉歸0(spec §7.2規則5), solve_grade_path固定從grade_from鏈路的0開始算,
+refine_from這個欄位在升階路徑裡完全用不到。
 """
 
 from __future__ import annotations
@@ -70,11 +83,6 @@ class BuildCostReport:
     items: list[ItemCostReport]
     zeny_total: Fraction
     warnings: list[str]
-
-
-def _merge_into(target: dict[str, Fraction], source: dict[str, Fraction]) -> None:
-    for name, qty in source.items():
-        target[name] = target.get(name, Fraction(0)) + qty
 
 
 def _derive_enchant_goal(
@@ -131,15 +139,35 @@ def _evaluate_refine_grade(
         )
         return dict(exp.materials), {}, exp.zeny_fee, Fraction(0), exp.body_count
 
+    if ct.refine_from > 0:
+        # I5(M3 final review交辦): 升階成功後精煉歸0(spec §7.2規則5), 所以
+        # refine_from在升階路徑裡完全不會被solve_grade_path用到(它固定從
+        # grade_from鏈路的0開始) — 使用者若填了非0值, 那是設定跟實際計算
+        # 模型不一致, 必須警告讓使用者知道這個欄位被忽略, 不能默默照算。
+        warnings.append(
+            f"部位{slot_key}的refine_from={ct.refine_from}在升階路徑不適用"
+            f"(升階後精煉歸0), 已忽略"
+        )
+
     if ct.refine_table is None:
         warnings.append(_MISSING_REFINE_TABLE_WARNING_FMT.format(slot_key=slot_key))
         return {}, {}, Fraction(0), Fraction(0), Fraction(1)
     if ct.refine_table not in rules.refine_tables:
         raise ValueError(f"部位{slot_key}的refine_table「{ct.refine_table}」不存在於規則表")
 
-    exp2 = solve_grade_path(
-        rules, ct.refine_table, ct.grade_from, slot.grade, final_refine=target
-    )
+    try:
+        exp2 = solve_grade_path(
+            rules, ct.refine_table, ct.grade_from, slot.grade, final_refine=target
+        )
+    except ValueError as exc:
+        # C1(M3 final review交辦)優雅降級: 不是每張精煉表都符合
+        # solve_grade_path「升階前精煉段不可爆件」的簡化模型前提(見refine.py
+        # solve_grade_path docstring) — 這種「表本身不支援升階路徑」的情況
+        # 不該讓整支CLI直接traceback, 改記警告並把這格的精煉/升階成本略記為
+        # 0(附魔評估不受影響, 呼叫端仍會繼續跑), 呼應rules.py缺表同一種
+        # 「不默默但也不整支炸掉」的opt-in降級哲學。
+        warnings.append(f"部位{slot_key}升階成本無法計算({exc}), 已略過")
+        return {}, {}, Fraction(0), Fraction(0), Fraction(1)
     return (
         dict(exp2.materials),
         dict(exp2.grade_materials),
@@ -149,6 +177,27 @@ def _evaluate_refine_grade(
     )
 
 
+def _translate_enchant_material_names(
+    reader: DbReader, materials_in: dict[str, Fraction]
+) -> dict[str, Fraction]:
+    """I3(M3 final review交辦): 附魔材料的名稱來自require_cost字串, 存的是
+    裝備item的internal_name(如MD_Geffen_Coin), 不是userdata/prices.json慣用
+    的中文顯示名稱(如吉芬幣) — 兩者對不上會讓明明有登記價格的材料被誤判成
+    「無價格」。在合併進direct/materials.expand之前, 逐一查
+    DbReader.item_by_internal_name轉成display_name(查得到才轉, 查無則保留
+    internal_name原樣, 不假裝有對應的中文名) — 轉換後是否仍然缺價格, 一律
+    交給既有的materials.price_total警告機制判斷, 這裡不重複產生任何警告。
+    同一個display_name理論上不該對到兩個不同internal_name, 但保險起見用
+    materials.merge_into累加, 不是直接dict覆蓋。
+    """
+    translated: dict[str, Fraction] = {}
+    for name, qty in materials_in.items():
+        item = reader.item_by_internal_name(name)
+        display_name = item.display_name if item is not None and item.display_name else name
+        materials.merge_into(translated, {display_name: qty})
+    return translated
+
+
 def _evaluate_enchant(
     slot_key: str,
     slot: SlotConfig,
@@ -156,6 +205,7 @@ def _evaluate_enchant(
     reader: DbReader,
     manual: dict,
     prices: dict[str, int],
+    exchange_recipes: materials.Recipes,
     item_internal_name: str | None,
     warnings: list[str],
 ) -> tuple[dict[str, Fraction], Fraction]:
@@ -179,7 +229,8 @@ def _evaluate_enchant(
             # goal_slot_index/goal_option用不到(查表失敗發生在比對它們之前),
             # 給無意義佔位值即可。
             result = enchant.solve_enchant(
-                reader, manual, item_internal_name, 0, "", ct.enchant_strategy, prices
+                reader, manual, item_internal_name, 0, "", ct.enchant_strategy, prices,
+                exchange_recipes,
             )
             warnings.extend(result.warnings)
             return {}, Fraction(0)
@@ -192,12 +243,13 @@ def _evaluate_enchant(
         return {}, Fraction(0)
 
     result = enchant.solve_enchant(
-        reader, manual, item_internal_name, goal_slot, goal_option, ct.enchant_strategy, prices
+        reader, manual, item_internal_name, goal_slot, goal_option, ct.enchant_strategy, prices,
+        exchange_recipes,
     )
     warnings.extend(result.warnings)
     if not result.available:
         return {}, Fraction(0)
-    return dict(result.materials), result.zeny
+    return _translate_enchant_material_names(reader, result.materials), result.zeny
 
 
 def evaluate_item_cost(
@@ -227,13 +279,13 @@ def evaluate_item_cost(
         slot_key, slot, ct, rules, warnings
     )
     enchant_mat, enchant_zeny = _evaluate_enchant(
-        slot_key, slot, ct, reader, manual, prices, internal_name, warnings
+        slot_key, slot, ct, reader, manual, prices, rules.exchange_recipes, internal_name, warnings
     )
 
     direct: dict[str, Fraction] = {}
-    _merge_into(direct, refine_mat)
-    _merge_into(direct, grade_mat)
-    _merge_into(direct, enchant_mat)
+    materials.merge_into(direct, refine_mat)
+    materials.merge_into(direct, grade_mat)
+    materials.merge_into(direct, enchant_mat)
 
     breakdown = materials.expand(direct, rules.exchange_recipes)
     extra_fees = refine_fee + grade_fee + enchant_zeny

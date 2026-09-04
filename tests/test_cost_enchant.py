@@ -215,6 +215,53 @@ def test_reset_expectation_rate_and_n_minus_1_multiplication(tmp_path):
     reader.close()
 
 
+def test_reset_rule_missing_rate_raises(tmp_path):
+    # M2/M5收尾補齊: reset_rules一筆缺"rate"欄位, 舊版直接dict[...]會冒出
+    # KeyError, 比照rules.py「缺欄位一律ValueError」的一貫作法補齊。
+    rows = [
+        _row(3, ["Reset_Item"], 5, "100", "GoalOpt", 1),
+        _row(3, ["Reset_Item"], 5, "100", "OtherOpt", 3),
+    ]
+    db_path = _make_db(tmp_path, rows)
+    reader = DbReader(db_path)
+    manual = _empty_manual()
+    manual["reset_rules"]["3"] = {"zeny": 1000, "materials": []}  # 缺rate
+
+    with pytest.raises(ValueError, match="rate"):
+        solve_enchant(reader, manual, "Reset_Item", 5, "GoalOpt", "last_slot_only")
+    reader.close()
+
+
+def test_reset_rule_rate_out_of_range_raises(tmp_path):
+    rows = [
+        _row(3, ["Reset_Item"], 5, "100", "GoalOpt", 1),
+        _row(3, ["Reset_Item"], 5, "100", "OtherOpt", 3),
+    ]
+    db_path = _make_db(tmp_path, rows)
+    reader = DbReader(db_path)
+    manual = _empty_manual()
+    manual["reset_rules"]["3"] = {"rate": "1.5", "zeny": 1000, "materials": []}
+
+    with pytest.raises(ValueError, match=r"\(0,1\]"):
+        solve_enchant(reader, manual, "Reset_Item", 5, "GoalOpt", "last_slot_only")
+    reader.close()
+
+
+def test_reset_rule_rate_malformed_raises(tmp_path):
+    rows = [
+        _row(3, ["Reset_Item"], 5, "100", "GoalOpt", 1),
+        _row(3, ["Reset_Item"], 5, "100", "OtherOpt", 3),
+    ]
+    db_path = _make_db(tmp_path, rows)
+    reader = DbReader(db_path)
+    manual = _empty_manual()
+    manual["reset_rules"]["3"] = {"rate": "not_a_number", "zeny": 1000, "materials": []}
+
+    with pytest.raises(ValueError, match="格式錯誤"):
+        solve_enchant(reader, manual, "Reset_Item", 5, "GoalOpt", "last_slot_only")
+    reader.close()
+
+
 def test_reset_rule_lookup_falls_back_to_item_internal_name(tmp_path):
     rows = [
         _row(7, ["Named_Reset_Item"], 1, "0", "GoalOpt", 1),

@@ -220,6 +220,24 @@ def convert_grade_steps(ws) -> list[dict]:
     return steps
 
 
+# 高密度乙太礦石兌換配方改名層 (spec §12假設3, M3 final review交辦I1/controller
+# ruling): excel「各材料兌換」表原始的「乙太鈣礦石」/「乙太鈽鐳礦石」兩列(经
+# 上面NAME_FIXES把「鈽鐳」正名為「鈰鐳」後即「乙太鈰鐳礦石」), product名與其
+# 礦石input名兩端都缺"高密度"前綴 — 對照refine_tables裡ether_armor2表15級以後
+# 實際消耗的材料名是"高密度乙太鈣礦石"/"高密度乙太鈰鐳礦石"(由"高密度鈣礦石"/
+# "高密度鈰鐳礦石"兌換而成, 這兩者在prices.json裡已登記172,500), 不是excel原始
+# 列名指向的"鈣礦石"/"鈰鐳礦石"(prices.json裡是另一種較低階材料, 單價0) —
+# 兩者名字只差"高密度"前綴, 但指的是完全不同的東西, excel這兩列漏打了。
+# 使用者已核准的unit economics: 172,500(高密度XX礦石base價) + 3x乙太星塵
+# (單價0) + 50,000手續費 = 222,500, 印證這裡的改名結果正確。只對這兩筆recipe
+# 做改名(不影響其餘沒有這個疑義的兌換配方, 也不影響"鈣礦石"/"鈰鐳礦石"本身
+# 在其他地方——它們自己就是合法的低階材料——的用法)。
+_ETHER_ORE_RENAME = {
+    "乙太鈣礦石": ("高密度乙太鈣礦石", {"鈣礦石": "高密度鈣礦石"}),
+    "乙太鈰鐳礦石": ("高密度乙太鈰鐳礦石", {"鈰鐳礦石": "高密度鈰鐳礦石"}),
+}
+
+
 def convert_exchange_recipes(ws) -> dict:
     recipes = {}
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -229,6 +247,12 @@ def convert_exchange_recipes(ws) -> dict:
         inputs = [parse_named_qty(part, sep="x")
                   for part in str(row[1]).split("、")]
         fee = parse_int_zeny(row[2])
+
+        if name in _ETHER_ORE_RENAME:
+            new_name, input_rename = _ETHER_ORE_RENAME[name]
+            name = new_name
+            inputs = [(input_rename.get(n, n), q) for n, q in inputs]
+
         recipes[name] = {
             "inputs": [{"name": n, "qty": q} for n, q in inputs],
             "fee": fee,

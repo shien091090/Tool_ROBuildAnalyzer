@@ -167,6 +167,57 @@ def test_cost_targets_bad_enchant_goal_shape_raises_at_load_time(tmp_path):
         load_build(path)
 
 
+def test_cost_targets_enchant_goal_two_char_string_rejected_at_load_time(tmp_path):
+    # M2/M5收尾補齊: 舊版用len()==2判斷"是否為兩元素陣列", 一個剛好2字元的
+    # 字串(如"ab")在len()底下也是2, 會被誤當成合法的[slot_index,option] —
+    # 必須先擋型別(必須是list/tuple)再看長度。
+    data = {
+        "name": "壞配裝",
+        "slots": {"armor": {"item_id": 1, "cost_targets": {"enchant_goal": "ab"}}},
+    }
+    path = tmp_path / "build.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="enchant_goal"):
+        load_build(path)
+
+
+def test_cost_targets_negative_refine_from_raises_at_load_time(tmp_path):
+    data = {
+        "name": "壞配裝",
+        "slots": {"armor": {"item_id": 1, "cost_targets": {"refine_from": -1}}},
+    }
+    path = tmp_path / "build.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="refine_from"):
+        load_build(path)
+
+
+def test_cost_targets_non_int_refine_from_raises_at_load_time(tmp_path):
+    data = {
+        "name": "壞配裝",
+        "slots": {"armor": {"item_id": 1, "cost_targets": {"refine_from": "3"}}},
+    }
+    path = tmp_path / "build.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="refine_from"):
+        load_build(path)
+
+
+def test_cost_targets_bad_enchant_strategy_raises_at_load_time(tmp_path):
+    data = {
+        "name": "壞配裝",
+        "slots": {"armor": {"item_id": 1, "cost_targets": {"enchant_strategy": "bogus"}}},
+    }
+    path = tmp_path / "build.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="enchant_strategy"):
+        load_build(path)
+
+
 def test_invalid_refine_table_name_raises_at_eval_time(tmp_path):
     # build.py無從得知表名是否合法(它不持有CostRules) — 驗證留給report層
     # 在真的要用到規則表時做, 這裡確認load_build本身「不」在載入時擋這個。
@@ -309,6 +360,42 @@ def test_unavailable_enchant_item_warns_and_skips_cost(tmp_path):
     reader.close()
 
 
+def test_enchant_material_priced_via_display_name_translation(tmp_path):
+    # I3(M3 final review交辦): 附魔材料的require_cost存internal_name
+    # ("MD_X"), userdata/prices.json用中文顯示名("測試幣") — report層要在
+    # 合併進direct之前把internal_name轉成display_name(查DbReader.
+    # item_by_internal_name), 兩者才對得上, 明明有登記價格的材料才不會被
+    # 誤判成「無價格」。
+    enchant_rows = [
+        _enchant_row(30, ["TranslateArmor"], 1, '0, {"MD_X", 5}', "GoalOpt", 1),
+        _enchant_row(30, ["TranslateArmor"], 1, '0, {"MD_X", 5}', "OtherOpt", 3),
+    ]
+    db_path = _make_db(
+        tmp_path, "db.sqlite",
+        items=[
+            _item_row(6, "TranslateArmor", "翻譯測試防具"),
+            _item_row(99, "MD_X", "測試幣"),
+        ],
+        enchant_rows=enchant_rows,
+    )
+    reader = DbReader(db_path)
+    manual = _empty_manual()
+    prices = {"測試幣": 100}
+    slot = SlotConfig(
+        item_id=6, enchants=["GoalOpt"],
+        cost_targets=CostTargets(enchant_strategy="last_slot_only", enchant_goal=(1, "GoalOpt")),
+    )
+
+    report = evaluate_item_cost("armor", slot, load_rules(REAL_RULES_PATH), prices, reader, manual)
+
+    # N=總權重4/goal權重1=4, 單輪MD_X x5 → 期望x20, 翻譯後以顯示名"測試幣"計價。
+    assert report.direct == {"測試幣": Fraction(20)}
+    assert report.base == {"測試幣": Fraction(20)}
+    assert not any("無價格" in w for w in report.warnings)
+    assert report.zeny_total == Fraction(2000)
+    reader.close()
+
+
 # ---------------------------------------------------------------------------
 # 基準Zeny總計(使用者定案錨點, 凍結價格)
 # ---------------------------------------------------------------------------
@@ -345,6 +432,30 @@ def test_baseline3_ether_armor2_zero_to_13_zeny_total(tmp_path):
     assert report.zeny_total == Fraction(6696227500, 63)
     assert int(report.zeny_total) == 106289325
     assert report.warnings == []
+    reader.close()
+
+
+def test_baseline5_ether_armor2_zero_to_16_zeny_total(tmp_path):
+    # I1(M3 final review交辦)驗證錨點: 0→16跨過15級起才存在的
+    # "高密度乙太鈣礦石"兌換配方(I1改名層修正後才接得上正確的
+    # "高密度鈣礦石"input, 見test_cost_rules.py同名測項), 也跨過14級起的
+    # break階(body_count=100, 有爆件重來)。獨立推導(見task-8-report.md「M3
+    # final fix wave」章節)算出zeny_total=1137259675000/63(int=18051740873),
+    # 與reviewer當時凍結價格量得的18,051,740,873完全一致。
+    db_path = _make_db(tmp_path, "db.sqlite", items=[_item_row(1, "TestArmor", "測試防具")])
+    reader = DbReader(db_path)
+    rules = load_rules(REAL_RULES_PATH)
+    slot = SlotConfig(
+        item_id=1, refine=16, grade="none",
+        cost_targets=CostTargets(refine_from=0, grade_from="none", refine_table="ether_armor2"),
+    )
+
+    report = evaluate_item_cost("armor", slot, rules, FROZEN_PRICES, reader, _empty_manual())
+
+    assert report.zeny_total == Fraction(1137259675000, 63)
+    assert int(report.zeny_total) == 18051740873
+    assert report.warnings == []
+    assert report.body_count == Fraction(100)
     reader.close()
 
 
@@ -432,6 +543,68 @@ def test_zero_refine_target_without_table_no_warning(tmp_path):
 
     assert report.warnings == []
     assert report.zeny_total == Fraction(0)
+    reader.close()
+
+
+# ---------------------------------------------------------------------------
+# 升階路徑優雅降級 + refine_from警告(C1/I5, M3 final review交辦)
+# ---------------------------------------------------------------------------
+
+
+def test_grade_path_unsupported_table_degrades_with_warning_no_traceback(tmp_path):
+    # C1a: armor_lv1在4~6級有break階, none→D升階段落要求精煉到11級(徑過
+    # break段), 不符合solve_grade_path「升階前精煉段不可爆件」的簡化模型
+    # 前提(見refine.solve_grade_path docstring) — 這是先前會讓CLI直接
+    # traceback的場景(armor_lv1+grade配裝), 現在應優雅降級成警告, 該格精煉/
+    # 升階成本記0, 附魔評估繼續跑(不因升階路徑失敗就放棄整格)。
+    db_path = _make_db(
+        tmp_path, "db.sqlite",
+        items=[_item_row(2, "EnchantArmor", "附魔防具")],
+        enchant_rows=_MULTI_SLOT_ROWS,
+    )
+    reader = DbReader(db_path)
+    manual = _empty_manual()
+    slot = SlotConfig(
+        item_id=2, refine=13, grade="D", enchants=["OptE"],
+        cost_targets=CostTargets(
+            refine_from=0, grade_from="none", refine_table="armor_lv1",
+            enchant_strategy="last_slot_only", enchant_goal=(1, "OptE"),
+        ),
+    )
+
+    report = evaluate_item_cost("armor", slot, load_rules(REAL_RULES_PATH), {}, reader, manual)
+
+    assert report.refine_fee == Fraction(0)
+    assert report.grade_fee == Fraction(0)
+    assert any(
+        "部位armor升階成本無法計算" in w and w.endswith("已略過") for w in report.warnings
+    )
+
+    # 附魔仍照算(不受精煉/升階降級影響) — 用獨立呼叫solve_enchant的結果比對。
+    expected = solve_enchant(reader, manual, "EnchantArmor", 1, "OptE", "last_slot_only", {})
+    assert report.enchant_zeny == expected.zeny
+    for name, qty in expected.materials.items():
+        assert report.direct[name] == qty
+    # direct裡只剩附魔材料, 精煉/升階材料完全沒有混進去。
+    assert set(report.direct.keys()) == set(expected.materials.keys())
+    reader.close()
+
+
+def test_grade_path_ignores_refine_from_with_warning(tmp_path):
+    # I5: grade分支固定從grade_from鏈路的0開始算(升階成功後精煉歸0,
+    # spec §7.2規則5), refine_from在這條路徑完全用不到 — 使用者填了非0值
+    # 必須警告, 不能默默忽略掉。
+    db_path = _make_db(tmp_path, "db.sqlite", items=[_item_row(1, "TestArmor", "測試防具")])
+    reader = DbReader(db_path)
+    rules = load_rules(REAL_RULES_PATH)
+    slot = SlotConfig(
+        item_id=1, refine=13, grade="D",
+        cost_targets=CostTargets(refine_from=5, grade_from="none", refine_table="ether_armor2"),
+    )
+
+    report = evaluate_item_cost("armor", slot, rules, FROZEN_PRICES, reader, _empty_manual())
+
+    assert "部位armor的refine_from=5在升階路徑不適用(升階後精煉歸0), 已忽略" in report.warnings
     reader.close()
 
 

@@ -191,6 +191,31 @@ def test_baseline4_grade_path_none_to_a():
     assert result.body_count == Fraction(1)
 
 
+def test_grade_path_final_refine_zero_skips_final_leg_keeps_chain():
+    # C1b(M3 final review交辦): final_refine=0代表「升階鏈跑完就好, 不再往上
+    # 精煉」— 升階寶石/手續費(grade_materials/grade_fee)仍然要有(升階鏈G本身
+    # 沒被跳過), 但materials不該包含「最終精煉段(0→final_refine)」以外的
+    # 任何額外精煉材料 — 應該恰等於solve_refine(0→11)(none→D這一段refine_req
+    # 本身的精煉)本身的materials, 不多不少。
+    rules = load_rules(REAL_RULES_PATH)
+    leg_only = solve_refine(rules.refine_tables["ether_armor2"], target=11, blessing_item=rules.blessing_item)
+
+    result = solve_grade_path(rules, "ether_armor2", "none", "D", final_refine=0)
+
+    assert isinstance(result, RefineExpectation2)
+    assert result.materials == leg_only.materials
+    assert result.zeny_fee == leg_only.zeny_fee
+    assert result.grade_materials["乙太天藍寶石"] == Fraction(50, 7)
+    assert result.grade_fee == Fraction(5000000, 7)
+    assert result.body_count == Fraction(1)
+
+
+def test_solve_grade_path_negative_final_refine_raises():
+    rules = load_rules(REAL_RULES_PATH)
+    with pytest.raises(ValueError, match="final_refine"):
+        solve_grade_path(rules, "ether_armor2", "none", "D", final_refine=-1)
+
+
 def test_solve_grade_path_invalid_order_raises():
     rules = load_rules(REAL_RULES_PATH)
     with pytest.raises(ValueError):

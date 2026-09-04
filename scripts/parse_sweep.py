@@ -177,7 +177,7 @@ def main() -> int:
     combos_result.print_report(args.top)
 
     total_exceptions = items_result.exception_count + combos_result.exception_count
-    print(f"=== 總結 ===")
+    print("=== 總結 ===")
     print(f"總例外數(items+combos): {total_exceptions}")
     if total_exceptions:
         print("有例外, 解析器出現回歸 — 需修復。")

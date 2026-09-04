@@ -58,6 +58,7 @@ import re
 from dataclasses import dataclass, field
 from fractions import Fraction
 
+from app.core.cost import materials
 from app.core.db_reader import DbReader, EnchantRow
 
 _REQUIRE_COST_RE = re.compile(
@@ -163,7 +164,32 @@ def _reset_rule(manual: dict, table_index: str | int | None, item_internal_name:
     return None
 
 
+def _parse_reset_rate(reset_rule: dict, context: str) -> Fraction:
+    """驗證manual_enchants.json裡reset_rules一筆的rate欄位: 比照rules.py
+    「必要欄位缺漏/格式錯/範圍不合法一律ValueError, 不默默用0或100%頂替」
+    的一貫作法(M2/M5收尾補齊, M3 final review交辦) — 這裡沒有直接import
+    rules.py的private helper(那些函式的錯誤訊息是精煉表專用的context格式,
+    硬套會誤導使用者去查錯的地方), 附魔重置規則自己獨立維護一份等價邏輯。
+    """
+    if "rate" not in reset_rule:
+        raise ValueError(f"{context}: 缺少必要欄位「rate」")
+    raw = reset_rule["rate"]
+    try:
+        rate = Fraction(str(raw))
+    except (ValueError, ZeroDivisionError) as exc:
+        raise ValueError(f"{context}: rate「{raw}」格式錯誤, 須為可解析的分數/小數字串") from exc
+    if not (Fraction(0) < rate <= Fraction(1)):
+        raise ValueError(f"{context}: rate必須介於(0,1]之間, 得到{rate}")
+    return rate
+
+
 def _merge_add(target: dict[str, Fraction], name: str, qty: Fraction) -> None:
+    # I4(M3 final review交辦): 跟materials.merge_into做的事情很像, 但簽名不
+    # 相容(這裡是「單一name/qty累加進target」, materials.merge_into是「把
+    # 整個source dict累加進target」) — 呼叫端這裡永遠是逐筆算出一對name/qty
+    # 就要立刻併入, 沒有現成的source dict可以整包丟給merge_into, 硬改成
+    # 每次都包一層{name: qty}的dict只是多一次無謂配置, 不是真的重用, 所以
+    # 保留這支獨立的小輔助函式, 不跟merge_into合併。
     target[name] = target.get(name, Fraction(0)) + qty
 
 
@@ -185,29 +211,6 @@ def _slot_round_cost(
         for name, qty in slot_materials:
             _merge_add(materials, name, Fraction(qty))
     return zeny, materials
-
-
-def _priced_total(
-    zeny: Fraction | int,
-    materials: dict[str, Fraction] | list[dict],
-    prices: dict[str, int],
-    warnings: list[str],
-) -> Fraction:
-    """把zeny+材料折算成單一Fraction比較值: 材料不在prices裡以0計並記警告
-    (跟materials.price_total同一套哲學: `not in`才算缺價, price剛好是0是
-    合法已知值, 不生成警告)。"""
-    total = Fraction(zeny)
-    items = materials.items() if isinstance(materials, dict) else (
-        (m["name"], m["qty"]) for m in materials
-    )
-    for name, qty in items:
-        if name not in prices:
-            warnings.append(f"材料{name}無價格, 以0計")
-            price = 0
-        else:
-            price = prices[name]
-        total += Fraction(qty) * Fraction(price)
-    return total
 
 
 def _upgrade_chain_warning(manual: dict, goal_option: str) -> str | None:
@@ -248,9 +251,20 @@ def solve_enchant(
     goal_option: str,
     strategy: str,
     prices: dict[str, int] | None = None,
+    exchange_recipes: materials.Recipes | None = None,
 ) -> EnchantCostResult:
-    """解item附魔到(goal_slot_index, goal_option)的期望總成本, spec M3 §7.5。"""
+    """解item附魔到(goal_slot_index, goal_option)的期望總成本, spec M3 §7.5。
+
+    exchange_recipes(I4, M3 final review交辦): 指定附魔vs隨機路線的比價要在
+    「同等基礎」上比才公平 — 兩邊都先過materials.expand()展開兌換鏈(乙太
+    寶石之類的合成品在展開之後單價才是真正的基礎材料單價)、再用
+    materials.price_total()折算, 不再各自用一支獨立的_priced_total()直接
+    對「未展開的合成品名」查價(那樣如果合成品本身沒在prices.json裡登記,
+    會被誤判成無價格, 即使它展開後的基礎材料其實都有登記)。缺漏(None)時
+    視同空dict(不展開, 等同舊行為), 保持向下相容。
+    """
     prices = prices or {}
+    exchange_recipes = exchange_recipes or {}
 
     found = _rows_for_item(reader, manual, item_internal_name)
     if found is None:
@@ -308,7 +322,7 @@ def solve_enchant(
         reset_zeny = Fraction(0)
         reset_materials: dict[str, Fraction] = {}
     else:
-        reset_rate = Fraction(str(reset_rule["rate"]))
+        reset_rate = _parse_reset_rate(reset_rule, f"重置規則(table_index={table_index!r})")
         inv_reset = Fraction(1) / reset_rate
         reset_zeny = Fraction(reset_rule.get("zeny", 0)) * inv_reset
         reset_materials = {
@@ -347,19 +361,23 @@ def solve_enchant(
 
     # 有指定附魔規則可比 — 用同一組prices把兩條路線都折算成單一Fraction,
     # 嚴格更便宜(<)才採用, 持平或更貴一律留用隨機路線結果(見模組docstring)。
-    random_priced_warnings: list[str] = []
-    random_total = _priced_total(total_zeny, total_materials, prices, random_priced_warnings)
+    # I4: 兩邊都先過materials.expand()展開兌換鏈再用materials.price_total()
+    # 折算, 不是直接對「未展開的合成品名」查價, 站在同一基礎上比較才公平。
+    random_breakdown = materials.expand(total_materials, exchange_recipes)
+    random_total, random_priced_warnings = materials.price_total(
+        random_breakdown, prices, extra_fees=total_zeny
+    )
 
-    targeted_priced_warnings: list[str] = []
     targeted_zeny = Fraction(targeted.get("zeny", 0))
     targeted_materials_list = targeted.get("materials", [])
-    targeted_total = _priced_total(
-        targeted_zeny, targeted_materials_list, prices, targeted_priced_warnings
+    targeted_materials = {m["name"]: Fraction(m["qty"]) for m in targeted_materials_list}
+    targeted_breakdown = materials.expand(targeted_materials, exchange_recipes)
+    targeted_total, targeted_priced_warnings = materials.price_total(
+        targeted_breakdown, prices, extra_fees=targeted_zeny
     )
     comparison_warnings = [*random_priced_warnings, *targeted_priced_warnings]
 
     if targeted_total < random_total:
-        targeted_materials = {m["name"]: Fraction(m["qty"]) for m in targeted_materials_list}
         return EnchantCostResult(
             expected_rounds=Fraction(1),
             zeny=targeted_zeny,

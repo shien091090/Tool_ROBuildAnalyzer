@@ -31,6 +31,17 @@ class MaterialBreakdown:
     exchange_fee: Fraction = Fraction(0)  # 兌換手續費合計
 
 
+def merge_into(target: dict[str, Fraction], source: dict[str, Fraction]) -> None:
+    """把source的每個(name, qty)累加進target(就地修改, 缺key視為0起算)。
+
+    I4(M3 final review交辦): report.py與refine.py原本各自定義了一份byte-
+    identical的同名private輔助函式, 這裡把它hoist成公開版本統一由兩處
+    import重用, 避免同一份邏輯散落多處各自維護、容易改一處漏一處。
+    """
+    for name, qty in source.items():
+        target[name] = target.get(name, Fraction(0)) + qty
+
+
 def expand(quantities: dict[str, Fraction], recipes: Recipes) -> MaterialBreakdown:
     """把 quantities(合成品/基礎材料混合需求)遞迴展開成 MaterialBreakdown。"""
     base: dict[str, Fraction] = {}

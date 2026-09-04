@@ -99,8 +99,19 @@ SLOT_IDS: dict[str, int] = {
 GRADE_LEVELS: dict[str, int] = {"none": 0, "D": 1, "C": 2, "B": 3, "A": 4}
 
 
+_ENCHANT_STRATEGIES = frozenset({"stop_when_hit", "last_slot_only"})
+
+
 def _load_cost_targets(slot_key: str, raw: dict | None) -> CostTargets | None:
-    """解析單一格的cost_targets(spec §6) — 缺該鍵回傳None(該格不計成本)。"""
+    """解析單一格的cost_targets(spec §6) — 缺該鍵回傳None(該格不計成本)。
+
+    M2/M5收尾補齊(M3 final review交辦): refine_from/enchant_strategy/
+    enchant_goal三個欄位原本沒有在load時驗證(refine_from負數、
+    enchant_strategy打錯字、enchant_goal塞一個剛好2字元的字串——len("ab")==2
+    會被舊版len()==2判斷誤當成合法的[slot_index,option]兩元素陣列——都會
+    一路帶著壞值往下游算, 直到report.py才用不明不白的方式失敗甚至算出
+    看似合理但錯誤的數字), 這裡比照grade_from的一貫作法, 在load時就地擋下。
+    """
     if raw is None:
         return None
 
@@ -111,22 +122,40 @@ def _load_cost_targets(slot_key: str, raw: dict | None) -> CostTargets | None:
             f" 合法值: none/D/C/B/A"
         )
 
+    refine_from = raw.get("refine_from", 0)
+    # bool是int的子類別(isinstance(True, int)為True) — 明確排除, 否則JSON裡
+    # 手滑寫成true/false的refine_from會被靜靜地當成1/0接受。
+    if isinstance(refine_from, bool) or not isinstance(refine_from, int) or refine_from < 0:
+        raise ValueError(
+            f"配裝檔部位 '{slot_key}' 的cost_targets.refine_from '{refine_from}' 不合法,"
+            f" 須為>=0的整數"
+        )
+
+    enchant_strategy = raw.get("enchant_strategy", "last_slot_only")
+    if enchant_strategy not in _ENCHANT_STRATEGIES:
+        raise ValueError(
+            f"配裝檔部位 '{slot_key}' 的cost_targets.enchant_strategy "
+            f"'{enchant_strategy}' 不合法, 合法值: {sorted(_ENCHANT_STRATEGIES)}"
+        )
+
     enchant_goal_raw = raw.get("enchant_goal")
     if enchant_goal_raw is None:
         enchant_goal = None
-    elif len(enchant_goal_raw) == 2:
+    elif isinstance(enchant_goal_raw, (list, tuple)) and len(enchant_goal_raw) == 2:
         enchant_goal = (int(enchant_goal_raw[0]), str(enchant_goal_raw[1]))
     else:
+        # 型別必須是list/tuple(不能是字串) — 一個剛好2字元的字串(如"ab")在
+        # 純len()==2判斷下會被誤當成合法的兩元素陣列, 必須先擋型別再看長度。
         raise ValueError(
             f"配裝檔部位 '{slot_key}' 的cost_targets.enchant_goal必須是"
             f"[slot_index, option內部名]兩元素陣列, 得到{enchant_goal_raw!r}"
         )
 
     return CostTargets(
-        refine_from=raw.get("refine_from", 0),
+        refine_from=refine_from,
         grade_from=grade_from,
         refine_table=raw.get("refine_table"),
-        enchant_strategy=raw.get("enchant_strategy", "last_slot_only"),
+        enchant_strategy=enchant_strategy,
         enchant_goal=enchant_goal,
     )
 
