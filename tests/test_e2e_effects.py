@@ -22,7 +22,7 @@ from app.core.aggregate import evaluate_build
 from app.core.build import load_build, load_character
 from app.core.context import CalcContext
 from app.core.db_reader import DbReader
-from app.core.entries import KIND_NUMERIC, KIND_UNRESOLVED
+from app.core.entries import KIND_NUMERIC, KIND_UNRECOGNIZED, KIND_UNRESOLVED
 from app.core.maps import make_maps
 from app.core.parser import parse_effect_block
 
@@ -122,6 +122,31 @@ def test_full_build_evaluate_smoke():
     # 靜默吞掉。
     assert isinstance(effects.warnings, list)
     assert "找不到套裝: combo_id=2000001028（部位:armor）" in effects.warnings
+
+
+def test_410211_same_script_temp_value_resolves():
+    """深淵湖水龍寶寶(410211)本體 onstart: `SetEquipTempValue(0, (get(11)))` 再
+    兩次 `AddExtParam(..., GetEquipTempValue(0))` (M3 同腳本暫存值支援) —
+    給 get(11)=BaseLv=250 的角色檔上下文, 應解出 ATK+250、MATK+250, 且無
+    UNRECOGNIZED(改進前這兩行落入無法辨識, 見 tempvalue-report.md CLI 前後對照)。
+    """
+    with DbReader(str(_DB_PATH)) as reader:
+        item = reader.item(410211)
+    assert item is not None
+    assert item.onstart_equip_src
+    assert "SetEquipTempValue" in item.onstart_equip_src
+    assert "GetEquipTempValue" in item.onstart_equip_src
+
+    maps = make_maps(str(_DB_PATH))
+    ctx = _empty_ctx()
+    ctx.get_values[11] = 250  # base_lv, mirrors test_rk.json's 250
+    result = parse_effect_block(item.onstart_equip_src, ctx, None, maps)
+
+    unrecognized = [e for e in result.entries if e.kind == KIND_UNRECOGNIZED]
+    assert len(unrecognized) == 0
+    keys = {(e.key, e.value) for e in result.entries if e.kind == KIND_NUMERIC}
+    assert ("ATK", 250.0) in keys
+    assert ("MATK", 250.0) in keys
 
 
 def test_unresolved_surface_smoke():

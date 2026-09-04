@@ -40,6 +40,18 @@ text backing each):
    continue). This matches the task-6 brief/tests
    (test_if_false_branch_skipped_to_trace) and is the only behavioral
    "fix" in this port; every other quirk is preserved as-is (see below).
+5. M3 addition (deliberate improvement over the original, user-approved —
+   NOT a ported behavior; ROItemSearchApp's ro_core.py never supported this
+   either): SetEquipTempValue(N, expr) is evaluated and its result stored
+   into variables[f"__equip_temp_{N}__"] instead of being muted to a trace
+   line as pure plumbing. A SAME-SCRIPT GetEquipTempValue(N) read (handled
+   in lua_expr.normalize(), change 8) now resolves through the ordinary
+   variables-substitution path. Scoped conservatively to same-script only —
+   the `variables` dict is already per-parse_effect_block call, so
+   cross-script sharing is not implemented and a cross-script
+   GetEquipTempValue(N) read still degrades to KIND_UNRECOGNIZED exactly as
+   before this change. See KNOWN_PLUMBING_PREFIXES's comment below for the
+   full before/after.
 
 Preserved quirks (intentionally NOT fixed, per porting policy):
 
@@ -78,24 +90,33 @@ from app.core.maps import EffectMaps
 
 IGNORE_PREFIXES = ("local ", "Stat ", "{Type ", "}", "function")
 
-# KNOWN_PLUMBING_PREFIXES (task-7 hygiene batch, M2 final review handover):
-# SetEquipTempValue(...) is client-side temp-value storage plumbing — it
-# writes into a slot the client engine reads back later, but the call itself
-# has no user-facing display meaning of its own. Left unhandled, it fell
-# through to the generic fallback and became a KIND_UNRECOGNIZED "無法辨識"
-# entry (~1200 lines across the corpus, per the M2 census) — noise, since
-# there is nothing to display about the write itself. These lines are now
-# routed to trace instead (visible for debugging, not an entry).
+# KNOWN_PLUMBING_PREFIXES (task-7 hygiene batch, M2 final review handover;
+# SUPERSEDED for SetEquipTempValue by the M3 same-script temp-value support
+# below — kept as an empty tuple, not deleted, so a future genuinely-inert
+# plumbing prefix has a documented place to land).
 #
-# This does NOT hide real information loss: whatever line later CONSUMES the
-# temp value — via GetEquipTempValue(...) or the plain variable the value
-# was assigned into — still goes through the ordinary expression-evaluation
-# path. If that consuming expression can't be resolved (GetEquipTempValue is
-# not a recognized function/substitution and the temp var was never
-# assigned), lua_expr.safe_eval returns None there and the consuming line
-# still becomes a KIND_UNRECOGNIZED entry as before — only the plumbing
-# call's own line is muted, not the value loss it may cause downstream.
-KNOWN_PLUMBING_PREFIXES = ("SetEquipTempValue(",)
+# Originally: SetEquipTempValue(...) was routed straight to trace (never
+# even parsed) because the temp-value slot it wrote into was, at the time,
+# unsupported plumbing — the client reads it back later via
+# GetEquipTempValue(...), but this port had no mechanism to model that
+# read/write pair, so there was "nothing to display about the write itself"
+# and consuming lines simply degraded to KIND_UNRECOGNIZED (~1200 lines
+# across the M2 census).
+#
+# M3 change (user-approved, see docstring below and lua_expr.normalize()
+# change 8): SetEquipTempValue(N, expr) is now actually evaluated and its
+# result stored into variables[f"__equip_temp_{N}__"] — see the dispatch
+# site below (search "SetEquipTempValue(" in parse_effect_block) — so a
+# SAME-SCRIPT GetEquipTempValue(N) read (same parse_effect_block call, i.e.
+# the same onstart_equip_src block; the `variables` dict is per-call so
+# cross-script sharing comes free as "not possible", not as something that
+# had to be blocked) now resolves correctly instead of losing the value.
+# Deliberately NOT implemented: cross-script temp-value sharing (a
+# GetEquipTempValue(N) read in a script that never ran a matching
+# SetEquipTempValue(N, ...) in the SAME block) — the client's real
+# cross-script semantics were not verified, so those reads still degrade to
+# KIND_UNRECOGNIZED exactly as before, same as any other unresolvable call.
+KNOWN_PLUMBING_PREFIXES = ()
 
 # AddExtParam/SubExtParam (handler #3) sub-mapping by static_maps.EFFECT_MAP
 # id — source: user's 效果分類.xlsx (category-taxonomy branch ruling). Every
@@ -1941,6 +1962,34 @@ def parse_effect_block(
 
         if original_line.startswith(KNOWN_PLUMBING_PREFIXES):
             trace.append(f"📌 已知暫存值管線呼叫（略過顯示）: {original_line}")
+            continue
+
+        # ---- SetEquipTempValue(N, expr) — M3 same-script temp-value
+        # support (see KNOWN_PLUMBING_PREFIXES comment above and
+        # lua_expr.normalize() change 8). Reached here only when `active`
+        # is True (the `if not active` branch above already `continue`d),
+        # same guarantee KNOWN_PLUMBING_PREFIXES relied on. N is parsed as a
+        # literal integer to match lua_expr's GetEquipTempValue(\d+) regex
+        # on the read side — a non-literal N (never observed in the real
+        # corpus) falls through to the generic UNRECOGNIZED entry below
+        # rather than guessing. ----
+        if original_line.startswith("SetEquipTempValue("):
+            temp_args = lua_expr.get_lua_call_args("SetEquipTempValue", original_line)
+            temp_n = None
+            if temp_args and len(temp_args) >= 2:
+                try:
+                    temp_n = int(temp_args[0].strip())
+                except ValueError:
+                    temp_n = None
+            if temp_n is None:
+                entries_out.append(_unrecognized(original_line))
+                continue
+            temp_val = lua_expr.safe_eval(temp_args[1], variables, ctx, slot_id)
+            if temp_val is None:
+                trace.append(f"⚠️ 暫存值[{temp_n}]無法計算: {temp_args[1]}")
+            else:
+                variables[f"__equip_temp_{temp_n}__"] = temp_val
+                trace.append(f"📌 暫存值[{temp_n}] = {temp_val}")
             continue
 
         entries_out.append(

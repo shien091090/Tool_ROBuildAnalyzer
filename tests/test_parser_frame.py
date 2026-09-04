@@ -169,14 +169,17 @@ def test_function_wrapper_line_ignored_no_unrecognized():
     assert numeric[0].value == 7.0
 
 
-def test_set_equip_temp_value_routed_to_trace_not_unrecognized():
-    # Task 7 KNOWN_PLUMBING: SetEquipTempValue(...) is client temp-value
-    # storage plumbing with no display meaning of its own — it must not
-    # become a KIND_UNRECOGNIZED "無法辨識" entry, only a trace line.
+def test_set_equip_temp_value_uncomputable_routed_to_trace_not_unrecognized():
+    # M3 update (was Task 7 KNOWN_PLUMBING): SetEquipTempValue(N, expr) is
+    # now actually evaluated, not muted plumbing. `temp` here is never
+    # assigned, so the expr can't be computed — the write itself still must
+    # not become a KIND_UNRECOGNIZED "無法辨識" entry (there's nothing to
+    # display about a write), but the trace line is now the ⚠️
+    # uncomputable-value variant, not the old "略過顯示" plumbing message.
     ctx = _ctx()
     r = parser.parse_effect_block("SetEquipTempValue(0, temp)", ctx, None, _maps())
     assert r.entries == []
-    assert any("SetEquipTempValue(0, temp)" in l for l in r.trace)
+    assert any("⚠️ 暫存值[0]無法計算: temp" in l for l in r.trace)
 
 
 def test_get_equip_temp_value_consumer_still_unrecognized():
@@ -195,6 +198,79 @@ def test_get_equip_temp_value_consumer_still_unrecognized():
     e = r.entries[0]
     assert e.kind == entries.KIND_UNRECOGNIZED
     assert e.extra["raw_line"] == "SubSpellCastTime(temp3)"
+
+
+# ---------------------------------------------------------------------------
+# M3 same-script temp-value support (SetEquipTempValue/GetEquipTempValue,
+# same-script only — see parser.py module docstring point 5 and
+# lua_expr.normalize() change 8).
+# ---------------------------------------------------------------------------
+
+
+def test_equip_temp_value_same_script_resolves_to_atk_and_matk():
+    # Fixture mirrors the real 深淵湖水龍寶寶 (item 410211) onstart_equip_src:
+    # "BaseLv每1, ATK+1 MATK+1" via get(11)=BaseLv stashed into temp slot 0,
+    # then read back twice (ExtParam 41=ATK, 200=MATK).
+    ctx = _ctx(get_values={11: 250})
+    block = (
+        "SetEquipTempValue(0, (get(11)))\n"
+        "AddExtParam(0, 41, (GetEquipTempValue(0)))\n"
+        "AddExtParam(0, 200, (GetEquipTempValue(0)))\n"
+    )
+    r = parser.parse_effect_block(block, ctx, None, _maps())
+    unrecognized = [e for e in r.entries if e.kind == entries.KIND_UNRECOGNIZED]
+    assert len(unrecognized) == 0
+    numeric = {(e.key, e.value) for e in r.entries if e.kind == entries.KIND_NUMERIC}
+    assert ("ATK", 250.0) in numeric
+    assert ("MATK", 250.0) in numeric
+
+
+def test_equip_temp_value_uncomputable_set_consumer_still_unrecognized():
+    # SetEquipTempValue's own expr is uncomputable (GetSkillLevel(999) is
+    # never enabled in this ctx) — nothing gets stored under
+    # __equip_temp_0__, so the consuming AddExtParam line still can't
+    # resolve and still becomes UNRECOGNIZED, exactly as before this change.
+    ctx = _ctx()
+    block = (
+        "SetEquipTempValue(0, (GetSkillLevel(999)))\n"
+        "AddExtParam(0, 41, (GetEquipTempValue(0)))\n"
+    )
+    r = parser.parse_effect_block(block, ctx, None, _maps())
+    unrecognized = [e for e in r.entries if e.kind == entries.KIND_UNRECOGNIZED]
+    assert len(unrecognized) == 1
+    assert unrecognized[0].extra["raw_line"] == "AddExtParam(0, 41, (GetEquipTempValue(0)))"
+
+
+def test_equip_temp_value_cross_block_isolation():
+    # Cross-script (cross-parse_effect_block-call) isolation: the variables
+    # dict is per-call, so a SetEquipTempValue in one call's block must NOT
+    # leak into a later, separate parse_effect_block call — deliberately
+    # unsupported (see KNOWN_PLUMBING_PREFIXES comment / module docstring).
+    ctx = _ctx()
+    parser.parse_effect_block("SetEquipTempValue(0, 5)", ctx, None, _maps())
+    r2 = parser.parse_effect_block("SubSpellCastTime(GetEquipTempValue(0))", ctx, None, _maps())
+    assert len(r2.entries) == 1
+    e = r2.entries[0]
+    assert e.kind == entries.KIND_UNRECOGNIZED
+    assert e.extra["raw_line"] == "SubSpellCastTime(GetEquipTempValue(0))"
+
+
+def test_equip_temp_value_usable_in_later_condition():
+    # A stored temp value must also be usable inside a later if-condition,
+    # not just as a plain handler argument.
+    ctx = _ctx()
+    block = (
+        "SetEquipTempValue(1, 20)\n"
+        "if 10 < GetEquipTempValue(1) then\n"
+        "AddDamage_CRI(1, 5)\n"
+        "end\n"
+    )
+    r = parser.parse_effect_block(block, ctx, None, _maps())
+    unrecognized = [e for e in r.entries if e.kind == entries.KIND_UNRECOGNIZED]
+    assert len(unrecognized) == 0
+    cri = [e for e in r.entries if e.key == "爆擊傷害"]
+    assert len(cri) == 1
+    assert cri[0].value == 5.0
 
 
 # ---------------------------------------------------------------------------

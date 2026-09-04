@@ -35,6 +35,22 @@ Deliberate behavioral changes from the original (binding, see M2 plan Task 5):
    ``ctx.get_value(N)`` instead of a raw dict ``.get(N, 0)``. A miss does NOT
    substitute 0 — it records ``"get:{N}"`` in the missing-keys set and leaves
    the call untouched, same shape as change (1)'s GetSkillLevel handling.
+8. ``GetEquipTempValue(N)`` (M3 same-script temp-value support) is rewritten
+   to the identifier ``__equip_temp_N__`` before the variables-substitution
+   step below. If ``parser.py``'s ``SetEquipTempValue(N, expr)`` handling
+   already wrote ``variables[f"__equip_temp_{N}__"]`` earlier in the SAME
+   ``parse_effect_block`` call (same script — the ``variables`` dict is
+   per-block, so cross-script sharing is not possible), the ordinary
+   variables loop resolves it like any other numeric variable. If not (the
+   temp value was never set in this script, was set to an uncomputable
+   expression, or — deliberately unsupported — was set by a DIFFERENT
+   script), the identifier survives substitution, ``_eval_python_expr``
+   fails on the bare name, and ``safe_eval``/``eval_condition`` return
+   ``None`` exactly as they already do for any other unresolvable
+   expression. No new missing-key category is introduced for this case: a
+   cross-script ``GetEquipTempValue`` read is indistinguishable from an
+   unsupported one here, and that is an accepted, deliberately conservative
+   limitation (binding ruling, M3 plan) rather than a bug.
 """
 
 from __future__ import annotations
@@ -61,6 +77,7 @@ _RE_WEAPON_LV = re.compile(r"GetEquipWeaponLv\((\d+)\)")
 _RE_WEAPON_CLASS_LOCATION = re.compile(r"GetWeaponClass\s*\(\s*GetLocation\s*\(\s*\)\s*\)")
 _RE_ITEM_ID_LOCATION = re.compile(r"GetItemIDLocation\((\d+)\)")
 _RE_SKILL_LEVEL = re.compile(r"GetSkillLevel\((\d+)\)")
+_RE_EQUIP_TEMP_VALUE = re.compile(r"GetEquipTempValue\((\d+)\)")
 _RE_PET_RELATIONSHIP = re.compile(r"GetPetRelationship\s*\(\s*\)")
 _RE_ALLOWED_EVAL = re.compile(r"^[0-9A-Za-z_+\-*/%().<>=!&|,\[\]\s]+$")
 
@@ -139,6 +156,16 @@ def normalize(
     expr = re.sub(r"\btrue\b", "True", expr, flags=re.IGNORECASE)
     expr = re.sub(r"\bfalse\b", "False", expr, flags=re.IGNORECASE)
     expr = re.sub(r"\bnil\b", "0", expr, flags=re.IGNORECASE)
+
+    # Deliberate addition (8, see module docstring): GetEquipTempValue(N)
+    # becomes the identifier __equip_temp_N__ so the variables-substitution
+    # loop right below can resolve it if parser.py's SetEquipTempValue
+    # handling populated that key earlier in this SAME parse_effect_block
+    # call. Placed before the loop deliberately — an unresolved occurrence
+    # is left as a plain identifier, which fails eval and degrades to None
+    # exactly like any other unrecognized token (no missing-key tracking
+    # needed here, unlike get(N)/GetSkillLevel(N) above).
+    expr = _RE_EQUIP_TEMP_VALUE.sub(lambda m: f"__equip_temp_{m.group(1)}__", expr)
 
     # 僅替換純數值變數；dict/list 等內部狀態不應塞回 eval 字串。
     for v in sorted(variables.keys(), key=lambda x: -len(x)):
