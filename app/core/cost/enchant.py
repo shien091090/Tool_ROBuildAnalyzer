@@ -223,6 +223,23 @@ def _upgrade_chain_warning(manual: dict, goal_option: str) -> str | None:
     return None
 
 
+def enchant_table_slots(
+    reader: DbReader, manual: dict, item_internal_name: str
+) -> list[int] | None:
+    """回傳item附魔表(自動優先, 查無fallback manual_tables)實際存在的slot_index
+    降冪唯一清單, 供report層(task-6交辦)在cost_targets.enchant_goal缺漏時,
+    依「enchants清單順序對應表slot_index降冪」推導預設目標用。兩層都查無
+    (跟solve_enchant回傳available=False同一個判斷)回傳None, 呼叫端據此決定
+    要不要直接沿用solve_enchant的null result(含統一警告文字), 不在這裡另外
+    重複組一份訊息。
+    """
+    found = _rows_for_item(reader, manual, item_internal_name)
+    if found is None:
+        return None
+    _table_index, rows = found
+    return sorted({r[0] for r in rows}, reverse=True)
+
+
 def solve_enchant(
     reader: DbReader,
     manual: dict,

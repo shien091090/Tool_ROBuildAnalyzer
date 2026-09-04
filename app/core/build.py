@@ -12,12 +12,32 @@ from pathlib import Path
 
 
 @dataclass
+class CostTargets:
+    """描述某格「從什麼狀態養到目前狀態」— spec §6, M3成本引擎的計算輸入。
+
+    只有掛了cost_targets的格才計成本(見report.evaluate_build_cost) — 沒掛=
+    使用者不關心該格成本, 不是「查無資料」, 不產生警告。
+    """
+    refine_from: int = 0
+    grade_from: str = "none"
+    refine_table: str | None = None  # 精煉表名(對照CostRules.refine_tables的key);
+    # 必填才算精煉/升階成本 — 缺漏不在這裡(load_build)報錯, 因為build.py不持有
+    # CostRules, 無從判斷表名是否存在; 留到report.evaluate_build_cost在eval-time
+    # 對照真正的規則表驗證(不存在的表名一律ValueError, 沿用rules.py「不默默」
+    # 的一貫作法), 目標為0(沒有實際養成動作)時則連warning都不產生。
+    enchant_strategy: str = "last_slot_only"
+    enchant_goal: tuple[int, str] | None = None  # (slot_index, option內部名);
+    # 缺→report層取slot.enchants最末非null者, 依附魔表實際slot_index降冪對位
+
+
+@dataclass
 class SlotConfig:
     item_id: int
     refine: int = 0
     grade: str = "none"
     cards: list[int] = field(default_factory=list)
     enchants: list[str | None] = field(default_factory=list)  # internal_name
+    cost_targets: CostTargets | None = None
 
 
 @dataclass
@@ -79,11 +99,46 @@ SLOT_IDS: dict[str, int] = {
 GRADE_LEVELS: dict[str, int] = {"none": 0, "D": 1, "C": 2, "B": 3, "A": 4}
 
 
+def _load_cost_targets(slot_key: str, raw: dict | None) -> CostTargets | None:
+    """解析單一格的cost_targets(spec §6) — 缺該鍵回傳None(該格不計成本)。"""
+    if raw is None:
+        return None
+
+    grade_from = raw.get("grade_from", "none")
+    if grade_from not in GRADE_LEVELS:
+        raise ValueError(
+            f"配裝檔部位 '{slot_key}' 的cost_targets.grade_from '{grade_from}' 不合法,"
+            f" 合法值: none/D/C/B/A"
+        )
+
+    enchant_goal_raw = raw.get("enchant_goal")
+    if enchant_goal_raw is None:
+        enchant_goal = None
+    elif len(enchant_goal_raw) == 2:
+        enchant_goal = (int(enchant_goal_raw[0]), str(enchant_goal_raw[1]))
+    else:
+        raise ValueError(
+            f"配裝檔部位 '{slot_key}' 的cost_targets.enchant_goal必須是"
+            f"[slot_index, option內部名]兩元素陣列, 得到{enchant_goal_raw!r}"
+        )
+
+    return CostTargets(
+        refine_from=raw.get("refine_from", 0),
+        grade_from=grade_from,
+        refine_table=raw.get("refine_table"),
+        enchant_strategy=raw.get("enchant_strategy", "last_slot_only"),
+        enchant_goal=enchant_goal,
+    )
+
+
 def load_build(path) -> Build:
     """Load a Build from userdata/builds/*.json (spec §6).
 
-    Unknown/extra JSON keys per slot (e.g. cost_targets, which belongs to the
-    M3 cost engine, not M2) are ignored rather than erroring.
+    Each slot's ``cost_targets`` (M3 cost-engine input describing what state
+    the item was grown FROM) is parsed into a CostTargets dataclass when
+    present; absent entirely means the user opted out of costing that slot
+    (see app.core.cost.report.evaluate_build_cost) — it is NOT ignored/dropped
+    silently, unlike the M2-era behaviour this docstring used to describe.
     """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     slots: dict[str, SlotConfig] = {}
@@ -99,6 +154,7 @@ def load_build(path) -> Build:
             grade=grade,
             cards=list(slot_data.get("cards", [])),
             enchants=list(slot_data.get("enchants", [])),
+            cost_targets=_load_cost_targets(slot_key, slot_data.get("cost_targets")),
         )
     return Build(name=data["name"], slots=slots)
 

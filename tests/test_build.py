@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from app.core.build import GRADE_LEVELS, SLOT_IDS, load_build, load_character
+from app.core.build import CostTargets, GRADE_LEVELS, SLOT_IDS, load_build, load_character
 
 
 def test_slot_ids_has_20_keys():
@@ -89,9 +89,13 @@ def test_load_build_roundtrip_spec_sample(tmp_path):
     assert slot.grade == "A"
     assert slot.cards == [4140]
     assert slot.enchants == ["Star_Cluster_Of_Pow3", "Wolf_Orb_Str_2", None]
+    assert slot.cost_targets == CostTargets(
+        refine_from=0, grade_from="none", refine_table=None,
+        enchant_strategy="last_slot_only", enchant_goal=None,
+    )
 
 
-def test_load_build_ignores_cost_targets_and_applies_defaults(tmp_path):
+def test_load_build_applies_defaults_when_slot_omits_optional_keys(tmp_path):
     data = {
         "name": "極簡配裝",
         "slots": {
@@ -109,6 +113,7 @@ def test_load_build_ignores_cost_targets_and_applies_defaults(tmp_path):
     assert slot.grade == "none"
     assert slot.cards == []
     assert slot.enchants == []
+    assert slot.cost_targets is None
 
 
 def _spec_character_json():

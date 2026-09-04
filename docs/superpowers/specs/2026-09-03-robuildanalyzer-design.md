@@ -122,15 +122,19 @@ Tool_ROBuildAnalyzer/
       "enchants": ["Star_Cluster_Of_Pow3", "Wolf_Orb_Str_2", null],
       "cost_targets": {
         "refine_from": 0, "grade_from": "none",
-        "enchant_strategy": "last_slot_only"
+        "refine_table": "armor_lv1",
+        "enchant_strategy": "last_slot_only",
+        "enchant_goal": [1, "Star_Cluster_Of_Pow3"]
       }
     }
   }
 }
 ```
 - 部位涵蓋: 一般裝備10格(上/中/下段頭飾、鎧甲、武器、盾牌、披肩、鞋子、飾品x2) + 服飾4格(上/中/下段、背飾, 可掛服飾強化石) + 影子裝備6格(鎧甲、手套、盾牌、鞋子、耳環、墜飾), 共20格
-- `cost_targets`描述「從什麼狀態養到目前狀態」, 成本引擎據此計算
+- `cost_targets`描述「從什麼狀態養到目前狀態」, 成本引擎據此計算; 整個欄位缺漏代表該格不計成本(選填, 非查無資料)
+- `refine_table`: 對照`refine_rules.json`的精煉表名(如`armor_lv1`); 缺漏且該格實際有精煉/升階目標時, 精煉/升階成本略過並記警告
 - `enchant_strategy`: `stop_when_hit`(中途附到目標詞條即停) / `last_slot_only`(只看最後一格)
+- `enchant_goal`: `[slot_index, option內部名]`, 指定要算到哪個附魔詞條; 缺漏時取`enchants`清單最末一個非null項, 依附魔表實際slot_index降冪對位推導
 - GUI操作為主, 存檔為可手改json
 
 ## 7. 成本引擎
