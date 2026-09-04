@@ -69,6 +69,30 @@ py -3.12-64 scripts/convert_refine_rules.py
 
 預設讀取路徑為 `C:\Users\lithoshu\Desktop\強化表\RO強化表.xlsx`, 可用 `--excel PATH` 覆寫。
 
+## M3: 成本結算 CLI
+
+成本結算(讀取M1匯入的中間資料庫+上一節產出的規則/價格資料, 對單一配裝逐格計算精煉/升階/附魔養成期望成本)也是M3功能, GUI仍是M4——本節只涵蓋M3的命令列驗證面。
+
+需先完成上方「執行方式」的M1匯入步驟(產出 `data/ro_items.db`)與上一節的規則轉換步驟。同樣須在repo根目錄以模組方式執行:
+
+```
+py -3.12-64 -m app.cli cost <build.json>
+```
+
+逐格印三層報表: [直接消耗(合成品層)](精煉材料+祝福+升階寶石+附魔材料) → [中間合成品(供參考)] → [基礎材料攤開](單價x數量小計), 之後印兌換/精煉/升階/附魔手續費、本體件數(純顯示不計價)、該格Zeny小計, 逐格印完後印配裝總Zeny與warnings。
+
+固定讀取 `userdata/refine_rules.json`、`userdata/prices.json`、`userdata/manual_enchants.json` 三份資料(精煉/升階/兌換規則、材料單價、舊式NPC附魔手動建檔), 均為repo根目錄相對路徑, 不開放CLI參數覆寫。
+
+配裝json裡每一格的 `cost_targets` 欄位描述「從什麼狀態養到目前狀態」, 是M3成本引擎的計算輸入(見上方「配裝(userdata/builds/*.json)」章節§6格式); 該格若缺這個欄位, 代表使用者不關心這格的養成成本, CLI會直接跳過、不產生任何警告。
+
+例如:
+
+```
+py -3.12-64 -m app.cli cost userdata/builds/sample_a.json
+```
+
+Windows終端機輸出中文若出現亂碼, 可加上 `PYTHONIOENCODING=utf-8` 環境變數。
+
 ## 測試
 
 ```

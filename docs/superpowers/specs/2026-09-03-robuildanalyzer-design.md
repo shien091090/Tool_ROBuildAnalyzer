@@ -122,7 +122,7 @@ Tool_ROBuildAnalyzer/
       "enchants": ["Star_Cluster_Of_Pow3", "Wolf_Orb_Str_2", null],
       "cost_targets": {
         "refine_from": 0, "grade_from": "none",
-        "refine_table": "armor_lv1",
+        "refine_table": "ether_armor2",
         "enchant_strategy": "last_slot_only",
         "enchant_goal": [1, "Star_Cluster_Of_Pow3"]
       }
@@ -158,6 +158,7 @@ Tool_ROBuildAnalyzer/
 8. 兌換鏈遞迴展開到底(乙太寶石→乙太魔石→乙太星塵), 中間合成品數量另列供參考
 9. 材料正名「乙太星塵」(excel的「乙太粉塵」為同一材料)
 10. 乙太裝備+14以上無防護手段, 失敗即消失
+11. 升階路徑僅支援0→refine_req精煉段無爆件風險的精煉表(現行資料=乙太表); 其他表設定升階會以警告略過該格成本
 
 ### 7.3 輸出格式(三層)
 1. 直接消耗(合成品層): 精煉材料+祝福+寶石+升階手續費+本體件數
