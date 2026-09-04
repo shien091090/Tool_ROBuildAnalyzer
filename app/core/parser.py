@@ -78,6 +78,25 @@ from app.core.maps import EffectMaps
 
 IGNORE_PREFIXES = ("local ", "Stat ", "{Type ", "}", "function")
 
+# KNOWN_PLUMBING_PREFIXES (task-7 hygiene batch, M2 final review handover):
+# SetEquipTempValue(...) is client-side temp-value storage plumbing — it
+# writes into a slot the client engine reads back later, but the call itself
+# has no user-facing display meaning of its own. Left unhandled, it fell
+# through to the generic fallback and became a KIND_UNRECOGNIZED "無法辨識"
+# entry (~1200 lines across the corpus, per the M2 census) — noise, since
+# there is nothing to display about the write itself. These lines are now
+# routed to trace instead (visible for debugging, not an entry).
+#
+# This does NOT hide real information loss: whatever line later CONSUMES the
+# temp value — via GetEquipTempValue(...) or the plain variable the value
+# was assigned into — still goes through the ordinary expression-evaluation
+# path. If that consuming expression can't be resolved (GetEquipTempValue is
+# not a recognized function/substitution and the temp var was never
+# assigned), lua_expr.safe_eval returns None there and the consuming line
+# still becomes a KIND_UNRECOGNIZED entry as before — only the plumbing
+# call's own line is muted, not the value loss it may cause downstream.
+KNOWN_PLUMBING_PREFIXES = ("SetEquipTempValue(",)
+
 # AddExtParam/SubExtParam (handler #3) sub-mapping by static_maps.EFFECT_MAP
 # id — source: user's 效果分類.xlsx (category-taxonomy branch ruling). Every
 # id currently in EFFECT_MAP is covered here; an id NOT in EFFECT_MAP falls
@@ -1918,6 +1937,10 @@ def parse_effect_block(
             continue
 
         if original_line.startswith(IGNORE_PREFIXES):
+            continue
+
+        if original_line.startswith(KNOWN_PLUMBING_PREFIXES):
+            trace.append(f"📌 已知暫存值管線呼叫（略過顯示）: {original_line}")
             continue
 
         entries_out.append(

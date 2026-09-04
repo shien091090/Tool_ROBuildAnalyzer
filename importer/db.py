@@ -43,6 +43,8 @@ CREATE TABLE skills(
   internal_name TEXT,
   skill_name TEXT
 );
+CREATE INDEX idx_enchant_table_slot ON enchant_tables(table_index, slot_index);
+CREATE INDEX idx_items_internal ON items(internal_name);
 """
 
 

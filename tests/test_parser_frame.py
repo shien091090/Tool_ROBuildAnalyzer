@@ -169,6 +169,29 @@ def test_function_wrapper_line_ignored_no_unrecognized():
     assert numeric[0].value == 7.0
 
 
+def test_set_equip_temp_value_routed_to_trace_not_unrecognized():
+    # Task 7 KNOWN_PLUMBING: SetEquipTempValue(...) is client temp-value
+    # storage plumbing with no display meaning of its own — it must not
+    # become a KIND_UNRECOGNIZED "無法辨識" entry, only a trace line.
+    ctx = _ctx()
+    r = parser.parse_effect_block("SetEquipTempValue(0, temp)", ctx, None, _maps())
+    assert r.entries == []
+    assert any("SetEquipTempValue(0, temp)" in l for l in r.trace)
+
+
+def test_get_equip_temp_value_consumer_still_unrecognized():
+    # Regression guard: muting the plumbing call itself must NOT hide the
+    # value loss when a later line actually consumes an unresolved temp
+    # value/var — that line still fails expression evaluation and still
+    # becomes UNRECOGNIZED, same as before this change.
+    ctx = _ctx()
+    r = parser.parse_effect_block("SubSpellCastTime(temp3)", ctx, None, _maps())
+    assert len(r.entries) == 1
+    e = r.entries[0]
+    assert e.kind == entries.KIND_UNRECOGNIZED
+    assert e.extra["raw_line"] == "SubSpellCastTime(temp3)"
+
+
 # ---------------------------------------------------------------------------
 # Extra coverage (>= 3 required)
 # ---------------------------------------------------------------------------

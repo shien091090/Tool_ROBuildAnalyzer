@@ -16,6 +16,16 @@ def test_create_builds_five_tables():
     assert {"items", "combos", "enchant_tables", "import_meta", "skills"} <= names
 
 
+def test_create_builds_query_indexes():
+    # Task 7 DB索引: enchant_tables(table_index, slot_index)與items(internal_name)
+    # 查詢索引 — 兩者都是既有讀取層(enchant_table_for_item/enchant_rows,
+    # item_by_internal_name)的高頻查詢欄位。
+    c = _conn()
+    names = {r[0] for r in c.execute(
+        "SELECT name FROM sqlite_master WHERE type='index'")}
+    assert {"idx_enchant_table_slot", "idx_items_internal"} <= names
+
+
 def test_insert_items_roundtrip_json_fields():
     c = _conn()
     db.insert_items(c, [{
