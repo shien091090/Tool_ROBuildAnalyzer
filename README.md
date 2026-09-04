@@ -59,6 +59,16 @@ py -3.12-64 -m app.cli compare userdata/builds/sample_a.json userdata/builds/sam
 
 Windows終端機輸出中文若出現亂碼, 可加上 `PYTHONIOENCODING=utf-8` 環境變數。
 
+## M3: 成本引擎規則資料
+
+`userdata/refine_rules.json`(精煉/升階/兌換規則)與 `userdata/prices.json`(材料單價)以使用者維護的《RO強化表.xlsx》為權威來源, 由 `scripts/convert_refine_rules.py` 一次性轉換產生; json產出後即為成本引擎的權威資料, 平時不再讀excel。若強化表內容更新, 重新執行以下指令(需先安裝dev extras的openpyxl)即可重轉並覆蓋兩份json:
+
+```
+py -3.12-64 scripts/convert_refine_rules.py
+```
+
+預設讀取路徑為 `C:\Users\lithoshu\Desktop\強化表\RO強化表.xlsx`, 可用 `--excel PATH` 覆寫。
+
 ## 測試
 
 ```

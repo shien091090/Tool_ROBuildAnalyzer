@@ -1,0 +1,1156 @@
+{
+  "refine_tables": {
+    "armor_lv1": {
+      "display": "一級防具",
+      "steps": [
+        {
+          "from": 0,
+          "to": 1,
+          "material": "鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 1,
+          "to": 2,
+          "material": "鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "material": "鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "material": "鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "material": "濃縮鋁",
+          "qty": 1,
+          "rate": "0.9",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "material": "濃縮鋁",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "material": "濃縮鋁",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "material": "濃縮鋁",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 1
+        },
+        {
+          "from": 8,
+          "to": 9,
+          "material": "濃縮鋁",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 2
+        },
+        {
+          "from": 9,
+          "to": 10,
+          "material": "濃縮鋁",
+          "qty": 1,
+          "rate": "0.2",
+          "fail": "stay",
+          "blessing": 3
+        },
+        {
+          "from": 10,
+          "to": 11,
+          "material": "鈣礦石",
+          "qty": 1,
+          "rate": "0.08",
+          "fail": "stay",
+          "blessing": 4
+        },
+        {
+          "from": 11,
+          "to": 12,
+          "material": "鈣礦石",
+          "qty": 1,
+          "rate": "0.08",
+          "fail": "stay",
+          "blessing": 4
+        },
+        {
+          "from": 12,
+          "to": 13,
+          "material": "鈣礦石",
+          "qty": 1,
+          "rate": "0.08",
+          "fail": "stay",
+          "blessing": 9
+        },
+        {
+          "from": 13,
+          "to": 14,
+          "material": "鈣礦石",
+          "qty": 1,
+          "rate": "0.08",
+          "fail": "stay",
+          "blessing": 15
+        },
+        {
+          "from": 14,
+          "to": 15,
+          "material": "特殊祝福的防具礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 15,
+          "to": 16,
+          "material": "特殊祝福的防具礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 16,
+          "to": 17,
+          "material": "特殊祝福的防具礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 17,
+          "to": 18,
+          "material": "特殊祝福的防具礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 18,
+          "to": 19,
+          "material": "特殊祝福的防具礦石",
+          "qty": 1,
+          "rate": "0.05",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 19,
+          "to": 20,
+          "material": "特殊祝福的防具礦石",
+          "qty": 1,
+          "rate": "0.05",
+          "fail": "stay",
+          "blessing": 0
+        }
+      ]
+    },
+    "weapon_lv4": {
+      "display": "四級武器",
+      "steps": [
+        {
+          "from": 0,
+          "to": 1,
+          "material": "神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 1,
+          "to": 2,
+          "material": "神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "material": "神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "material": "神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "material": "濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.9",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "material": "濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "material": "濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "material": "濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 1
+        },
+        {
+          "from": 8,
+          "to": 9,
+          "material": "濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 2
+        },
+        {
+          "from": 9,
+          "to": 10,
+          "material": "濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.2",
+          "fail": "stay",
+          "blessing": 3
+        },
+        {
+          "from": 10,
+          "to": 11,
+          "material": "鈰鐳礦石",
+          "qty": 1,
+          "rate": "0.08",
+          "fail": "stay",
+          "blessing": 4
+        },
+        {
+          "from": 11,
+          "to": 12,
+          "material": "鈰鐳礦石",
+          "qty": 1,
+          "rate": "0.08",
+          "fail": "stay",
+          "blessing": 4
+        },
+        {
+          "from": 12,
+          "to": 13,
+          "material": "鈰鐳礦石",
+          "qty": 1,
+          "rate": "0.08",
+          "fail": "stay",
+          "blessing": 9
+        },
+        {
+          "from": 13,
+          "to": 14,
+          "material": "鈰鐳礦石",
+          "qty": 1,
+          "rate": "0.08",
+          "fail": "stay",
+          "blessing": 15
+        },
+        {
+          "from": 14,
+          "to": 15,
+          "material": "特殊祝福的武器礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 15,
+          "to": 16,
+          "material": "特殊祝福的武器礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 16,
+          "to": 17,
+          "material": "特殊祝福的武器礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 17,
+          "to": 18,
+          "material": "特殊祝福的武器礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 18,
+          "to": 19,
+          "material": "特殊祝福的武器礦石",
+          "qty": 1,
+          "rate": "0.05",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 19,
+          "to": 20,
+          "material": "特殊祝福的武器礦石",
+          "qty": 1,
+          "rate": "0.05",
+          "fail": "stay",
+          "blessing": 0
+        }
+      ]
+    },
+    "shadow_armor": {
+      "display": "影子防具",
+      "steps": [
+        {
+          "from": 0,
+          "to": 1,
+          "material": "鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 1,
+          "to": 2,
+          "material": "鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "material": "鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "material": "鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "material": "濃縮鋁",
+          "qty": 1,
+          "rate": "0.9",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "material": "濃縮鋁",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "material": "濃縮鋁",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "material": "特殊祝福的防具礦石",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 8,
+          "to": 9,
+          "material": "特殊祝福的防具礦石",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 9,
+          "to": 10,
+          "material": "高濃縮鋁",
+          "qty": 1,
+          "rate": "0.2",
+          "fail": "minus1",
+          "blessing": 0
+        }
+      ]
+    },
+    "shadow_gauntlet": {
+      "display": "影子手套",
+      "steps": [
+        {
+          "from": 0,
+          "to": 1,
+          "material": "神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 1,
+          "to": 2,
+          "material": "神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "material": "神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "material": "神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "material": "濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.9",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "material": "濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "material": "濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "material": "特殊祝福的武器礦石",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 8,
+          "to": 9,
+          "material": "特殊祝福的武器礦石",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 0
+        },
+        {
+          "from": 9,
+          "to": 10,
+          "material": "高濃縮神之金屬",
+          "qty": 1,
+          "rate": "0.2",
+          "fail": "minus1",
+          "blessing": 0
+        }
+      ]
+    },
+    "ether_armor2": {
+      "display": "二級防具",
+      "steps": [
+        {
+          "from": 0,
+          "to": 1,
+          "material": "乙太鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 1,
+          "to": 2,
+          "material": "乙太鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "material": "乙太鋁",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "material": "濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.9",
+          "fail": "minus1",
+          "blessing": 0
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "material": "濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "minus1",
+          "blessing": 0
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "material": "濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.6",
+          "fail": "minus1",
+          "blessing": 0
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "material": "濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.6",
+          "fail": "minus1",
+          "blessing": 0
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "material": "濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 1
+        },
+        {
+          "from": 8,
+          "to": 9,
+          "material": "濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 2
+        },
+        {
+          "from": 9,
+          "to": 10,
+          "material": "濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.2",
+          "fail": "stay",
+          "blessing": 3
+        },
+        {
+          "from": 10,
+          "to": 11,
+          "material": "高濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.15",
+          "fail": "stay",
+          "blessing": 4
+        },
+        {
+          "from": 11,
+          "to": 12,
+          "material": "高濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.15",
+          "fail": "stay",
+          "blessing": 4
+        },
+        {
+          "from": 12,
+          "to": 13,
+          "material": "高濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.15",
+          "fail": "stay",
+          "blessing": 9
+        },
+        {
+          "from": 13,
+          "to": 14,
+          "material": "高濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.15",
+          "fail": "stay",
+          "blessing": 15
+        },
+        {
+          "from": 14,
+          "to": 15,
+          "material": "高濃縮乙太鋁",
+          "qty": 1,
+          "rate": "0.1",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 15,
+          "to": 16,
+          "material": "高密度乙太鈣礦石",
+          "qty": 1,
+          "rate": "0.1",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 16,
+          "to": 17,
+          "material": "高密度乙太鈣礦石",
+          "qty": 1,
+          "rate": "0.1",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 17,
+          "to": 18,
+          "material": "高密度乙太鈣礦石",
+          "qty": 1,
+          "rate": "0.1",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 18,
+          "to": 19,
+          "material": "高密度乙太鈣礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 19,
+          "to": 20,
+          "material": "高密度乙太鈣礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "break",
+          "blessing": 0
+        }
+      ]
+    },
+    "ether_weapon5": {
+      "display": "五級武器",
+      "steps": [
+        {
+          "from": 0,
+          "to": 1,
+          "material": "乙太神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 1,
+          "to": 2,
+          "material": "乙太神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 2,
+          "to": 3,
+          "material": "乙太神之金屬",
+          "qty": 1,
+          "rate": "1",
+          "fail": "safe",
+          "blessing": 0
+        },
+        {
+          "from": 3,
+          "to": 4,
+          "material": "濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.9",
+          "fail": "minus1",
+          "blessing": 0
+        },
+        {
+          "from": 4,
+          "to": 5,
+          "material": "濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.7",
+          "fail": "minus1",
+          "blessing": 0
+        },
+        {
+          "from": 5,
+          "to": 6,
+          "material": "濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.6",
+          "fail": "minus1",
+          "blessing": 0
+        },
+        {
+          "from": 6,
+          "to": 7,
+          "material": "濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.6",
+          "fail": "minus1",
+          "blessing": 0
+        },
+        {
+          "from": 7,
+          "to": 8,
+          "material": "濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 1
+        },
+        {
+          "from": 8,
+          "to": 9,
+          "material": "濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.4",
+          "fail": "stay",
+          "blessing": 2
+        },
+        {
+          "from": 9,
+          "to": 10,
+          "material": "濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.2",
+          "fail": "stay",
+          "blessing": 3
+        },
+        {
+          "from": 10,
+          "to": 11,
+          "material": "高濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.15",
+          "fail": "stay",
+          "blessing": 4
+        },
+        {
+          "from": 11,
+          "to": 12,
+          "material": "高濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.15",
+          "fail": "stay",
+          "blessing": 4
+        },
+        {
+          "from": 12,
+          "to": 13,
+          "material": "高濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.15",
+          "fail": "stay",
+          "blessing": 9
+        },
+        {
+          "from": 13,
+          "to": 14,
+          "material": "高濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.15",
+          "fail": "stay",
+          "blessing": 15
+        },
+        {
+          "from": 14,
+          "to": 15,
+          "material": "高濃縮乙太神之金屬",
+          "qty": 1,
+          "rate": "0.1",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 15,
+          "to": 16,
+          "material": "高密度乙太鈰鐳礦石",
+          "qty": 1,
+          "rate": "0.1",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 16,
+          "to": 17,
+          "material": "高密度乙太鈰鐳礦石",
+          "qty": 1,
+          "rate": "0.1",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 17,
+          "to": 18,
+          "material": "高密度乙太鈰鐳礦石",
+          "qty": 1,
+          "rate": "0.1",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 18,
+          "to": 19,
+          "material": "高密度乙太鈰鐳礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "break",
+          "blessing": 0
+        },
+        {
+          "from": 19,
+          "to": 20,
+          "material": "高密度乙太鈰鐳礦石",
+          "qty": 1,
+          "rate": "0.07",
+          "fail": "break",
+          "blessing": 0
+        }
+      ]
+    }
+  },
+  "blessing_item": "鐵匠的祝福",
+  "grade_steps": [
+    {
+      "from": "none",
+      "to": "D",
+      "refine_req": 11,
+      "rate": "0.7",
+      "materials": [
+        {
+          "name": "乙太天藍寶石",
+          "qty": 5
+        }
+      ],
+      "fee": 500000
+    },
+    {
+      "from": "D",
+      "to": "C",
+      "refine_req": 11,
+      "rate": "0.6",
+      "materials": [
+        {
+          "name": "乙太黃寶石",
+          "qty": 5
+        }
+      ],
+      "fee": 625000
+    },
+    {
+      "from": "C",
+      "to": "B",
+      "refine_req": 11,
+      "rate": "0.5",
+      "materials": [
+        {
+          "name": "乙太紫寶石",
+          "qty": 5
+        }
+      ],
+      "fee": 1000000
+    },
+    {
+      "from": "B",
+      "to": "A",
+      "refine_req": 11,
+      "rate": "0.4",
+      "materials": [
+        {
+          "name": "乙太琥珀",
+          "qty": 10
+        }
+      ],
+      "fee": 2500000
+    }
+  ],
+  "exchange_recipes": {
+    "乙太魔石": {
+      "inputs": [
+        {
+          "name": "乙太星塵",
+          "qty": 5
+        }
+      ],
+      "fee": 100000
+    },
+    "乙太天藍寶石": {
+      "inputs": [
+        {
+          "name": "乙太魔石",
+          "qty": 3
+        },
+        {
+          "name": "天藍寶石",
+          "qty": 1
+        }
+      ],
+      "fee": 100000
+    },
+    "乙太黃寶石": {
+      "inputs": [
+        {
+          "name": "乙太魔石",
+          "qty": 6
+        },
+        {
+          "name": "黃寶石",
+          "qty": 1
+        }
+      ],
+      "fee": 200000
+    },
+    "乙太紫寶石": {
+      "inputs": [
+        {
+          "name": "乙太魔石",
+          "qty": 10
+        },
+        {
+          "name": "紫寶石",
+          "qty": 1
+        }
+      ],
+      "fee": 300000
+    },
+    "乙太琥珀": {
+      "inputs": [
+        {
+          "name": "乙太魔石",
+          "qty": 15
+        },
+        {
+          "name": "琥珀",
+          "qty": 1
+        }
+      ],
+      "fee": 500000
+    },
+    "乙太鋁": {
+      "inputs": [
+        {
+          "name": "乙太星塵",
+          "qty": 1
+        },
+        {
+          "name": "鋁",
+          "qty": 1
+        }
+      ],
+      "fee": 10000
+    },
+    "乙太神之金屬": {
+      "inputs": [
+        {
+          "name": "乙太星塵",
+          "qty": 1
+        },
+        {
+          "name": "神之金屬",
+          "qty": 1
+        }
+      ],
+      "fee": 10000
+    },
+    "濃縮乙太鋁": {
+      "inputs": [
+        {
+          "name": "乙太星塵",
+          "qty": 2
+        },
+        {
+          "name": "濃縮鋁",
+          "qty": 1
+        }
+      ],
+      "fee": 20000
+    },
+    "濃縮乙太神之金屬": {
+      "inputs": [
+        {
+          "name": "乙太星塵",
+          "qty": 2
+        },
+        {
+          "name": "濃縮神之金屬",
+          "qty": 1
+        }
+      ],
+      "fee": 20000
+    },
+    "高濃縮乙太鋁": {
+      "inputs": [
+        {
+          "name": "乙太星塵",
+          "qty": 3
+        },
+        {
+          "name": "高濃縮鋁",
+          "qty": 1
+        }
+      ],
+      "fee": 50000
+    },
+    "高濃縮乙太神之金屬": {
+      "inputs": [
+        {
+          "name": "乙太星塵",
+          "qty": 3
+        },
+        {
+          "name": "高濃縮神之金屬",
+          "qty": 1
+        }
+      ],
+      "fee": 50000
+    },
+    "乙太鈰鐳礦石": {
+      "inputs": [
+        {
+          "name": "乙太星塵",
+          "qty": 3
+        },
+        {
+          "name": "鈰鐳礦石",
+          "qty": 1
+        }
+      ],
+      "fee": 50000
+    },
+    "乙太鈣礦石": {
+      "inputs": [
+        {
+          "name": "乙太星塵",
+          "qty": 3
+        },
+        {
+          "name": "鈣礦石",
+          "qty": 1
+        }
+      ],
+      "fee": 50000
+    }
+  }
+}
