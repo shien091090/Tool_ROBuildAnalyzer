@@ -184,6 +184,11 @@ def test_get_equip_temp_value_consumer_still_unrecognized():
     # value loss when a later line actually consumes an unresolved temp
     # value/var — that line still fails expression evaluation and still
     # becomes UNRECOGNIZED, same as before this change.
+    # Uses the bare `temp3` variable (never assigned) rather than a literal
+    # GetEquipTempValue(...) call deliberately — GetEquipTempValue is not a
+    # recognized function either way, and this shape (a bare unresolved temp
+    # var as the consuming expression) is what actually shows up across the
+    # real corpus per scripts/parse_sweep.py's UNRECOGNIZED census.
     ctx = _ctx()
     r = parser.parse_effect_block("SubSpellCastTime(temp3)", ctx, None, _maps())
     assert len(r.entries) == 1

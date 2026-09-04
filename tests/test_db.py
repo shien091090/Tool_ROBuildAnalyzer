@@ -18,8 +18,11 @@ def test_create_builds_five_tables():
 
 def test_create_builds_query_indexes():
     # Task 7 DB索引: enchant_tables(table_index, slot_index)與items(internal_name)
-    # 查詢索引 — 兩者都是既有讀取層(enchant_table_for_item/enchant_rows,
-    # item_by_internal_name)的高頻查詢欄位。
+    # 查詢索引。idx_enchant_table_slot只有 DbReader.enchant_rows(WHERE
+    # table_index=? ORDER BY slot_index DESC)真的用得到 — enchant_table_for_item
+    # 是 SELECT DISTINCT ... FROM enchant_tables(無WHERE)的全表掃描, 不吃這個索引,
+    # 該函式的效能瓶頸是Python端逐列json.loads(見db_reader.py docstring)。
+    # idx_items_internal對應 DbReader.item_by_internal_name 的 WHERE internal_name=?。
     c = _conn()
     names = {r[0] for r in c.execute(
         "SELECT name FROM sqlite_master WHERE type='index'")}

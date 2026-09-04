@@ -16,8 +16,10 @@
   - combos沒有equip_type欄位, 固定用slot_id=2(視同防具槽, 與armor同組)
   - 角色相關欄位一律空: scalars={}, enabled_skill_levels={}, get_values={}
 
-用法:
-    PYTHONIOENCODING=utf-8 py -3.12-64 scripts/parse_sweep.py [--db PATH] [--top N]
+用法(必須用 -m 以模組方式執行, 讓 app/importer 套件能被正確找到; 直接
+`py -3.12-64 scripts/parse_sweep.py` 會因為 app 不在 sys.path 而
+ModuleNotFoundError):
+    PYTHONIOENCODING=utf-8 py -3.12-64 -m scripts.parse_sweep [--db PATH] [--top N]
 """
 from __future__ import annotations
 
