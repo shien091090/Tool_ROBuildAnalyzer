@@ -23,13 +23,19 @@ from app.core.aggregate import BuildEffects, evaluate_build
 from app.core.build import load_build, load_character
 from app.core.compare import CompareRow, compare_builds
 from app.core.db_reader import DbReader
-from app.core.entries import CAT_MAGICAL, CAT_OTHER, CAT_PHYSICAL
+from app.core.entries import CAT_ABILITY, CAT_DAMAGE, CAT_OTHER, CAT_RESIST, CAT_SECONDARY
 from app.core.maps import make_maps
 from importer.config import ConfigInvalidError, ConfigNotFoundError
 from importer.config import load as load_config
 
-_CATEGORY_ORDER = [CAT_PHYSICAL, CAT_MAGICAL, CAT_OTHER]
-_CATEGORY_LABEL = {CAT_PHYSICAL: "physical", CAT_MAGICAL: "magical", CAT_OTHER: "other"}
+_CATEGORY_ORDER = [CAT_DAMAGE, CAT_RESIST, CAT_ABILITY, CAT_SECONDARY, CAT_OTHER]
+_CATEGORY_LABEL = {
+    CAT_DAMAGE: "傷害",
+    CAT_RESIST: "抗性",
+    CAT_ABILITY: "能力",
+    CAT_SECONDARY: "次要能力",
+    CAT_OTHER: "其他",
+}
 
 
 def resolve_db_path(config_path: str = "config.json") -> str:
