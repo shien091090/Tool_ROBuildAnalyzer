@@ -255,6 +255,29 @@ def test_equip_temp_value_cross_block_isolation():
     assert e.extra["raw_line"] == "SubSpellCastTime(GetEquipTempValue(0))"
 
 
+def test_equip_temp_value_not_stored_when_set_in_false_branch():
+    # Gate-ordering invariant: SetEquipTempValue inside a branch that never
+    # ran (condition_met is False) must NOT store into variables — the
+    # general gate (`if active: ...`) already skips this dispatch entirely
+    # for inactive lines, same as it skips V1-V8/handler matching. This
+    # locks that ordering in against a future refactor that might
+    # accidentally move the SetEquipTempValue dispatch ahead of the
+    # active-gate check.
+    ctx = _ctx()
+    block = (
+        "if 1 == 2 then\n"
+        "SetEquipTempValue(0, 5)\n"
+        "end\n"
+        "AddExtParam(0, 41, (GetEquipTempValue(0)))\n"
+    )
+    r = parser.parse_effect_block(block, ctx, None, _maps())
+    atk = [e for e in r.entries if e.key == "ATK"]
+    assert len(atk) == 0
+    unrecognized = [e for e in r.entries if e.kind == entries.KIND_UNRECOGNIZED]
+    assert len(unrecognized) == 1
+    assert unrecognized[0].extra["raw_line"] == "AddExtParam(0, 41, (GetEquipTempValue(0)))"
+
+
 def test_equip_temp_value_usable_in_later_condition():
     # A stored temp value must also be usable inside a later if-condition,
     # not just as a plain handler argument.
