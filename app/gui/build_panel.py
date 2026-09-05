@@ -21,6 +21,9 @@ from app.gui.slot_widget import SLOT_SECTIONS, SlotWidget
 
 _TAG_COLORS = {"A": "#7ec3e8", "B": "#cf9ee8"}
 _UNSAVED_ENTRY = "(未儲存新配裝)"
+_SAVE_TEXT = "儲存"
+_SAVE_AS_TEXT = "另存"
+_NEW_TEXT = "新增"
 
 
 class BuildPanel(QFrame):
@@ -49,9 +52,9 @@ class BuildPanel(QFrame):
         self._reload_file_combo()
         header.addWidget(self.file_combo, 1)
 
-        self.save_btn = QPushButton("儲存")
-        self.save_as_btn = QPushButton("另存")
-        self.new_btn = QPushButton("新增")
+        self.save_btn = QPushButton(_SAVE_TEXT)
+        self.save_as_btn = QPushButton(_SAVE_AS_TEXT)
+        self.new_btn = QPushButton(_NEW_TEXT)
         header.addWidget(self.save_btn)
         header.addWidget(self.save_as_btn)
         header.addWidget(self.new_btn)

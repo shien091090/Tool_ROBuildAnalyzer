@@ -44,3 +44,27 @@ def test_panel_set_build_renders_names(qapp, session):
     assert "+ 附魔" in chip_texts        # 表有2槽, 只填1個
     assert "+ 卡片" not in chip_texts    # 1洞已插滿
     assert "未裝備" in panel.slot_widgets["weapon"].name_label.text()
+
+
+def test_recompute_timer_interval_survives_character_combo_change(qapp, session):
+    from app.gui.main_window import MainWindow
+    win = MainWindow(session)
+    # 直接emit currentIndexChanged(int)模擬使用者切換角色檔選單 — 曾經這個int
+    # 會被誤傳進QTimer.start(int msec), 把250ms間隔悄悄改成傳入的index值。
+    win.character_combo.currentIndexChanged.emit(2)
+    win.panel_a.changed.emit()
+    assert win._timer.interval() == 250
+    assert win._timer.isActive()
+
+
+def test_slot_widget_dim_property_updates_on_unequip(qapp, session):
+    from app.gui.build_panel import BuildPanel
+    from app.gui.slot_widget import _UNEQUIPPED_TEXT
+    panel = BuildPanel("A", session)
+    path = session.builds_dir / "a.json"
+    panel.set_build(session.load_build(path), path)
+    w = panel.slot_widgets["armor"]
+    assert w.name_label.property("dim") is False
+    w.set_config(None, session)
+    assert w.name_label.property("dim") is True
+    assert w.name_label.text() == _UNEQUIPPED_TEXT

@@ -55,6 +55,9 @@ COSTUME_SLOTS = SLOT_SECTIONS[1][1]
 SHADOW_SLOTS = SLOT_SECTIONS[2][1]
 
 _UNEQUIPPED_TEXT = "— 未裝備(點擊選擇)"
+_ADD_CARD_TEXT = "+ 卡片"
+_ADD_ENCHANT_TEXT = "+ 附魔"
+_ADD_STONE_TEXT = "+ 強化石"
 _GRADE_LETTERS = {"D": "D", "C": "C", "B": "B", "A": "A"}
 
 _SLOT_HEIGHT = 28
@@ -67,6 +70,15 @@ def _make_chip(text: str, object_name: str) -> QToolButton:
     btn.setObjectName(object_name)
     btn.setAutoRaise(False)
     return btn
+
+
+def _repolish(widget) -> None:
+    """QSS的動態屬性選擇器(如[dim="true"]/[highlight="true"])不會在setProperty
+    後自動重新計算樣式, 必須手動unpolish+polish才會生效 — 抽成共用helper,
+    避免set_config的dim切換與set_highlight各自重複這兩行。
+    """
+    widget.style().unpolish(widget)
+    widget.style().polish(widget)
 
 
 class SlotWidget(QFrame):
@@ -135,11 +147,13 @@ class SlotWidget(QFrame):
         if cfg is None:
             self.name_label.setText(_UNEQUIPPED_TEXT)
             self.name_label.setProperty("dim", True)
+            _repolish(self.name_label)
             self.refine_label.setVisible(False)
             self.grade_label.setVisible(False)
             return
 
         self.name_label.setProperty("dim", False)
+        _repolish(self.name_label)
         self.name_label.setText(session.item_display(cfg.item_id))
 
         is_costume = self.slot_key in COSTUME_SLOTS
@@ -169,7 +183,7 @@ class SlotWidget(QFrame):
         entry = session.catalog.get(cfg.item_id)
         slot_count = entry.slot_count if entry is not None else 0
         if slot_count > len(cfg.cards):
-            self._add_chip("+ 卡片", "chip_add")
+            self._add_chip(_ADD_CARD_TEXT, "chip_add")
 
         pools = session.enchant_pools(cfg.item_id)
         filled = 0
@@ -178,18 +192,17 @@ class SlotWidget(QFrame):
                 filled += 1
                 self._add_chip(session.option_display(option), "chip_enchant")
         if len(pools) > filled:
-            self._add_chip("+ 附魔", "chip_add")
+            self._add_chip(_ADD_ENCHANT_TEXT, "chip_add")
 
     def _fill_costume_chips(self, cfg, session) -> None:
         if cfg.cards and cfg.cards[0] is not None:
             self._add_chip(session.item_display(cfg.cards[0]), "chip_stone")
         else:
-            self._add_chip("+ 強化石", "chip_add")
+            self._add_chip(_ADD_STONE_TEXT, "chip_add")
 
     def set_highlight(self, on: bool) -> None:
         self.setProperty("highlight", on)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        _repolish(self)
 
     def chip_buttons(self) -> list[QToolButton]:
         return [self._chips_layout.itemAt(i).widget() for i in range(self._chips_layout.count())]

@@ -19,13 +19,19 @@ from app.core.build import Character, new_build
 from app.gui.build_panel import BuildPanel
 
 _NO_CHARACTER_TEXT = "(無角色檔, 請在userdata/characters建立)"
+_WINDOW_TITLE = "RO Build Analyzer"
+_CHARACTER_LABEL_TEXT = "角色檔"
+_DATA_LABEL_FORMAT = "資料: {} 匯入"
+_UNKNOWN_IMPORT_DATE = "未知"
+_TAB_EFFECTS_TEXT = "效果結算"
+_TAB_COST_TEXT = "成本估算"
 
 
 class MainWindow(QMainWindow):
     def __init__(self, session):
         super().__init__()
         self._session = session
-        self.setWindowTitle("RO Build Analyzer")
+        self.setWindowTitle(_WINDOW_TITLE)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -34,19 +40,19 @@ class MainWindow(QMainWindow):
         root.setSpacing(6)
 
         top_row = QHBoxLayout()
-        title_label = QLabel("RO Build Analyzer")
+        title_label = QLabel(_WINDOW_TITLE)
         title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         top_row.addWidget(title_label)
         top_row.addStretch(1)
 
-        top_row.addWidget(QLabel("角色檔"))
+        top_row.addWidget(QLabel(_CHARACTER_LABEL_TEXT))
         self.character_combo = QComboBox()
         self._fill_character_combo()
         top_row.addWidget(self.character_combo)
 
         top_row.addStretch(1)
         import_date = session.import_date()
-        self.data_label = QLabel(f"資料: {import_date or '未知'} 匯入")
+        self.data_label = QLabel(_DATA_LABEL_FORMAT.format(import_date or _UNKNOWN_IMPORT_DATE))
         top_row.addWidget(self.data_label)
         root.addLayout(top_row)
 
@@ -65,8 +71,8 @@ class MainWindow(QMainWindow):
         center_row.addWidget(panels_widget, 47)
 
         self.tabs = QTabWidget()
-        self.tabs.addTab(QWidget(), "效果結算")
-        self.tabs.addTab(QWidget(), "成本估算")
+        self.tabs.addTab(QWidget(), _TAB_EFFECTS_TEXT)
+        self.tabs.addTab(QWidget(), _TAB_COST_TEXT)
         center_row.addWidget(self.tabs, 53)
 
         root.addLayout(center_row, 1)
@@ -77,9 +83,17 @@ class MainWindow(QMainWindow):
         self._timer.setSingleShot(True)
         self._timer.setInterval(250)
         self._timer.timeout.connect(self.recompute)
-        self.panel_a.changed.connect(self._timer.start)
-        self.panel_b.changed.connect(self._timer.start)
-        self.character_combo.currentIndexChanged.connect(self._timer.start)
+        self.panel_a.changed.connect(self._schedule_recompute)
+        self.panel_b.changed.connect(self._schedule_recompute)
+        self.character_combo.currentIndexChanged.connect(self._schedule_recompute)
+
+    def _schedule_recompute(self, *_args) -> None:
+        """重啟debounce計時器 — 獨立無參數slot, 避免currentIndexChanged的int
+        參數被誤傳進QTimer.start(int msec)覆寫掉250ms間隔(曾經真的發生過:
+        選到index 2, timer.interval()就被悄悄改成2)。panel.changed亦統一走
+        這裡(即使它本身無參數), 保持兩種來源對稱、都不直接連QTimer.start。
+        """
+        self._timer.start()
 
     def _fill_character_combo(self) -> None:
         paths = self._session.list_characters()
