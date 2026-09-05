@@ -126,17 +126,17 @@ class PickerDialog(QDialog):
 
     @staticmethod
     def equipment_rows(session, slot_key: str, job_id: int | None) -> list[PickRow]:
-        entries = session.catalog.equipment_for_slot(slot_key, job_id=job_id)
+        entries = session.equipment_for_slot(slot_key, job_id=job_id)
         return [PickRow(e.item_id, e.display_name, "", description_to_html(e.description)) for e in entries]
 
     @staticmethod
     def card_rows(session, slot_key: str) -> list[PickRow]:
-        entries = session.catalog.cards_for_slot(slot_key)
+        entries = session.cards_for_slot(slot_key)
         return [PickRow(e.item_id, e.display_name, "", description_to_html(e.description)) for e in entries]
 
     @staticmethod
     def stone_rows(session, slot_key: str) -> list[PickRow]:
-        entries = session.catalog.stones_for_slot(slot_key)
+        entries = session.stones_for_slot(slot_key)
         return [PickRow(e.item_id, e.display_name, "", description_to_html(e.description)) for e in entries]
 
     @staticmethod

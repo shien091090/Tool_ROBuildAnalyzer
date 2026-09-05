@@ -23,11 +23,13 @@ from app.gui.effects_tab import EffectsTab
 _NO_CHARACTER_TEXT = "(無角色檔, 請在userdata/characters建立)"
 _WINDOW_TITLE = "RO Build Analyzer"
 _CHARACTER_LABEL_TEXT = "角色檔"
-_DATA_LABEL_FORMAT = "資料: {} 匯入"
+_DATA_LABEL_FORMAT = "資料: {} 匯入 ・ 目錄未分類 {} 件"
 _UNKNOWN_IMPORT_DATE = "未知"
 _TAB_EFFECTS_TEXT = "效果結算"
 _TAB_COST_TEXT = "成本估算"
 _NO_CHARACTER_ERROR_TEXT = "請先在userdata/characters建立角色檔"
+_LOAD_ERROR_TITLE = "載入配裝失敗"
+_LOAD_ERROR_FORMAT = "無法載入配裝檔 {path}: {error}"
 
 
 class MainWindow(QMainWindow):
@@ -55,7 +57,9 @@ class MainWindow(QMainWindow):
 
         top_row.addStretch(1)
         import_date = session.import_date()
-        self.data_label = QLabel(_DATA_LABEL_FORMAT.format(import_date or _UNKNOWN_IMPORT_DATE))
+        self.data_label = QLabel(
+            _DATA_LABEL_FORMAT.format(import_date or _UNKNOWN_IMPORT_DATE, session.unclassified_count())
+        )
         top_row.addWidget(self.data_label)
         root.addLayout(top_row)
 
@@ -82,7 +86,7 @@ class MainWindow(QMainWindow):
 
         root.addLayout(center_row, 1)
 
-        self._load_initial_builds()
+        had_load_error = self._load_initial_builds()
 
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
@@ -91,6 +95,15 @@ class MainWindow(QMainWindow):
         self.panel_a.changed.connect(self._schedule_recompute)
         self.panel_b.changed.connect(self._schedule_recompute)
         self.character_combo.currentIndexChanged.connect(self._schedule_recompute)
+
+        # I2修復: 啟動時不重算的話, 兩頁都是空白、panel.job_id也還是None(職業
+        # 過濾checkbox要等第一次編輯後debounce計時器觸發recompute才會建出來)
+        # — 一開始就跑一次同步recompute, 讓畫面在使用者做任何操作前就有內容。
+        # 例外: 若初始載入某面板失敗(_load_initial_builds已把錯誤訊息顯示在
+        # 效果頁), 這裡就不再自動recompute蓋掉那則訊息 — 讓使用者先看到是哪個
+        # 檔案壞了, 之後任何編輯動作(_schedule_recompute)一樣會正常觸發重算。
+        if not had_load_error:
+            self.recompute()
 
     def _schedule_recompute(self, *_args) -> None:
         """重啟debounce計時器 — 獨立無參數slot, 避免currentIndexChanged的int
@@ -109,13 +122,28 @@ class MainWindow(QMainWindow):
         for p in paths:
             self.character_combo.addItem(p.name)
 
-    def _load_initial_builds(self) -> None:
+    def _load_initial_builds(self) -> bool:
+        """回傳是否有任一面板初始載入失敗(呼叫端據此決定要不要接著自動
+        recompute — 見__init__的說明)。"""
+        had_error = False
         paths = self._session.list_builds()
         for i, panel in enumerate((self.panel_a, self.panel_b)):
             if i < len(paths):
-                panel.set_build(self._session.load_build(paths[i]), paths[i])
+                path = paths[i]
+                try:
+                    panel.set_build(self._session.load_build(path), path)
+                except (ValueError, OSError) as e:
+                    # I3修復: 壞配裝json(缺欄位/格式錯誤)不該讓整個app.gui進程
+                    # 直接崩潰 — 該面板退回一個空白新配裝, 並把錯誤顯示在效果頁,
+                    # 讓使用者知道哪個檔案有問題、但仍能繼續操作其他面板。
+                    panel.set_build(new_build("未命名"), None)
+                    self.effects_tab.show_error(
+                        _LOAD_ERROR_FORMAT.format(path=path.name, error=f"{type(e).__name__}: {e}")
+                    )
+                    had_error = True
             else:
                 panel.set_build(new_build("未命名"), None)
+        return had_error
 
     def current_character(self) -> Character | None:
         if self.character_combo.count() == 0 or not self.character_combo.isEnabled():

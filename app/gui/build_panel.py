@@ -50,6 +50,8 @@ _CONFIRM_TITLE = "尚未儲存"
 _CONFIRM_TEXT = "目前配裝有未儲存的變更, 要如何處理?"
 _DISCARD_TEXT = "放棄"
 _CANCEL_TEXT = "取消"
+_LOAD_ERROR_TITLE = "載入配裝失敗"
+_LOAD_ERROR_FORMAT = "無法載入配裝檔 {path}: {error}"
 
 
 class BuildPanel(QFrame):
@@ -184,6 +186,12 @@ class BuildPanel(QFrame):
     # -- apply_* (純方法, 不開任何對話框, 供handler與測試共用) --------------
 
     def apply_item(self, slot_key: str, item_id: int | None) -> None:
+        # I4修復: cost_targets描述的是「這件本體」的養成路徑(從什麼精煉/階級
+        # 狀態養到目前狀態, spec §6) — 換成別的道具後, 舊cost_targets指的
+        # refine_table/enchant_goal完全對不上新道具(precing表可能不存在,
+        # enchant_goal的option更可能是新道具根本沒有的詞條), 一律清成None
+        # (不計此格成本, 使用者要算的話得重新用「成本設定…」設一次); 精煉值/
+        # 階級則保留(spec: 這兩者是「格子目前的狀態」, 換裝不影響)。
         if item_id is None:
             self._build.slots.pop(slot_key, None)
         else:
@@ -194,7 +202,7 @@ class BuildPanel(QFrame):
                 grade=old.grade if old is not None else "none",
                 cards=[],
                 enchants=[],
-                cost_targets=old.cost_targets if old is not None else None,
+                cost_targets=None,
             )
         self._mark_changed()
 
@@ -262,6 +270,27 @@ class BuildPanel(QFrame):
     def load_from(self, path) -> None:
         self.set_build(self._session.load_build(path), Path(path))
         self.changed.emit()
+
+    def _try_load(self, path) -> bool:
+        """I3修復: load_from()對壞json會直接讓ValueError/JSONDecodeError往上炸
+        (壞slot key/grade/cost_targets, 或json格式錯誤) — 這裡包一層, 失敗時
+        彈提示、把combo選取項復原成目前實際載入的檔案、保留目前build不變,
+        回傳False; 呼叫端(_on_file_combo_changed)靠回傳值判斷要不要繼續往下
+        走(它自己不用再重複try/except)。
+        """
+        try:
+            self.load_from(path)
+        except (ValueError, OSError) as e:
+            self._show_load_error(
+                _LOAD_ERROR_FORMAT.format(path=Path(path).name, error=f"{type(e).__name__}: {e}")
+            )
+            self._sync_file_combo_selection()
+            return False
+        return True
+
+    def _show_load_error(self, text: str) -> None:
+        """拆成單獨方法方便測試monkeypatch掉QMessageBox, 不必真的彈出視窗。"""
+        QMessageBox.warning(self, _LOAD_ERROR_TITLE, text)
 
     def start_new(self, name: str) -> None:
         self.set_build(new_build(name), None)
@@ -394,7 +423,7 @@ class BuildPanel(QFrame):
         if self._dirty and not self._confirm_discard_or_save():
             self._sync_file_combo_selection()  # 使用者取消 → combo復原成目前實際載入的檔案
             return
-        self.load_from(target)
+        self._try_load(target)
 
     def _confirm_discard_or_save(self) -> bool:
         """dirty時切換檔案前的三選一: 儲存/放棄/取消。回傳True代表可以繼續切換

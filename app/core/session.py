@@ -16,13 +16,16 @@ from app.core.build import Build, Character, load_build, load_character, save_bu
 from app.core.catalog import ItemCatalog
 from app.core.compare import CompareRow, compare_builds
 from app.core.cost.enchant import rows_for_item
-from app.core.cost.report import BuildCostReport, evaluate_build_cost
+from app.core.cost.report import BuildCostReport, ItemCostReport, evaluate_build_cost
 from app.core.cost.rules import CostRules, load_prices, load_rules
 from app.core.db_reader import DbReader
 from app.core.maps import EffectMaps, make_maps
 from app.core.missing_text import describe_missing
 from importer.config import ConfigInvalidError, ConfigNotFoundError
 from importer.config import load as load_config
+
+__all__ = ["AnalyzerSession", "EnchantOption", "EnchantSlotPool", "BuildCostReport", "ItemCostReport",
+           "resolve_db_path"]
 
 
 def resolve_db_path(config_path: str = "config.json") -> str:
@@ -137,6 +140,31 @@ class AnalyzerSession:
 
     def describe_missing(self, missing):
         return describe_missing(missing, self.maps.skill_map)
+
+    # -- I6修復: GUI一律經這裡查目錄/物價, 不得直接碰self.catalog/self.prices
+    # 或另外import app.core.cost.report(見上面re-export) --------------------
+
+    def equipment_for_slot(self, slot_key, job_id=None):
+        return self.catalog.equipment_for_slot(slot_key, job_id=job_id)
+
+    def cards_for_slot(self, slot_key):
+        return self.catalog.cards_for_slot(slot_key)
+
+    def stones_for_slot(self, slot_key):
+        return self.catalog.stones_for_slot(slot_key)
+
+    def search_entries(self, entries, query):
+        return ItemCatalog.search(entries, query)
+
+    def slot_count_of(self, item_id) -> int:
+        entry = self.catalog.get(item_id)
+        return entry.slot_count if entry is not None else 0
+
+    def price_of(self, name: str) -> int | None:
+        return self.prices.get(name)
+
+    def unclassified_count(self) -> int:
+        return self.catalog.unclassified_count()
 
     def active_combo_members(self, build: Build, item_id: int) -> set[int]:
         """item_id所屬、且成員全在build已裝(本體+卡片)的所有combo成員id聯集(GUI hover套裝高亮用)。

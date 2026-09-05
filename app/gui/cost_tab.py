@@ -1,6 +1,6 @@
 """CostTab — 成本估算頁(T8): 兩張「期望總成本」卡 + 逐件三層明細樹。
 
-只透過session.cost()/session.prices/session.item_display()等既有方法取數,
+只透過session.cost()/session.price_of()/session.item_display()等既有方法取數,
 不重新解析/重算任何Fraction — 這裡的三個fmt_*/path_text函式是唯一把
 Fraction轉成顯示字串的地方(GUI edge), 其餘全程保持Fraction原樣傳遞。
 
@@ -17,7 +17,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget
 
 from app.core.build import SlotConfig
-from app.core.cost.report import BuildCostReport, ItemCostReport
+from app.core.session import BuildCostReport, ItemCostReport
 from app.gui.slot_widget import SLOT_LABELS
 from app.gui.theme import BAD, DIM, TEXT, WARN
 
@@ -37,6 +37,7 @@ _FEE_REFINE_LABEL = "精煉手續費"
 _FEE_GRADE_LABEL = "升階手續費"
 _FEE_ENCHANT_LABEL = "附魔費"
 _NO_PRICE_SUFFIX = "(無報價)"
+_EMPTY_TOTAL_TEXT = "—"
 _MATERIAL_QTY_FORMAT = "{} x {}"
 _BASE_MATERIAL_FORMAT = "{} x {} x {} = {}"
 
@@ -127,6 +128,14 @@ class CostTab(QWidget):
             body_label.setText("")
             body_label.setVisible(False)
             return
+        if report is None:
+            # M10修復: report/err皆為None(呼叫端還沒跑過recompute, 或該側刻意
+            # 不給結果)不能直接dereference report — 顯示空狀態, 不是拋例外。
+            total_label.setText(_EMPTY_TOTAL_TEXT)
+            total_label.setStyleSheet(f"color: {DIM}; font-weight: bold; font-size: 20px; font-family: Consolas;")
+            body_label.setText("")
+            body_label.setVisible(False)
+            return
         total_label.setStyleSheet(f"color: {TEXT}; font-weight: bold; font-size: 20px; font-family: Consolas;")
         total_label.setText(fmt_zeny(report.zeny_total))
         body_sum = sum((item.body_count for item in report.items), Fraction(0))
@@ -175,8 +184,8 @@ class CostTab(QWidget):
     def _base_material_layer(session, base: dict) -> QTreeWidgetItem:
         layer = QTreeWidgetItem([_LAYER_BASE_TITLE])
         for name, qty in sorted(base.items()):
-            if name in session.prices:
-                price = session.prices[name]
+            price = session.price_of(name)
+            if price is not None:
                 price_text = f"{price:,}"
             else:
                 price = 0

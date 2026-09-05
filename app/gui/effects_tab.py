@@ -7,8 +7,16 @@ key字串或重跑分類邏輯(分類已由parser.py算好放在categories/Compa
 
 四分類表格版面: 3欄(效果/配裝A名/配裝B名), 每個分類先插一列dim小字標題並
 setSpan橫跨3欄, 再逐列印該分類的CompareRow; 數值欄等寬字體右對齊, 優勢方
-cell字色good且粗體, None cell顯示"—"(dim色), tie不著色。
+cell字色good且粗體, None cell顯示"—"(dim色), tie不著色。category若不在
+CATEGORY_ORDER(parser.py理論上窮舉完了, 但不排除有漏網分類字串), 仍照樣
+顯示、以該原始字串當標題, 不悄悄丟掉那些列(不默默丟資料)。
+
+未計入區塊的condition/source/slot_label都是原始資料(condition來自parser
+逐字保留的Lua if運算式, 常見`<`/`>`) — 一律html.escape()後才嵌進RichText,
+tooltip則額外包一層<pre>避免Qt把純文字誤判成又一段RichText被截斷(C1修復)。
 """
+import html
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
@@ -181,12 +189,13 @@ class EffectsTab(QWidget):
         mono_font = QFont(_TABLE_FONT_FAMILY)
 
         r = 0
-        for cat in CATEGORY_ORDER:
+        unknown_cats = [c for c in by_cat if c not in CATEGORY_ORDER]
+        for cat in CATEGORY_ORDER + unknown_cats:
             cat_rows = by_cat.get(cat, [])
             if not cat_rows:
                 continue
             self.table.insertRow(r)
-            header_item = QTableWidgetItem(CATEGORY_LABEL[cat])
+            header_item = QTableWidgetItem(CATEGORY_LABEL.get(cat, cat))
             header_item.setForeground(QColor(DIM))
             self.table.setItem(r, 0, header_item)
             self.table.setSpan(r, 0, 1, 3)
@@ -228,8 +237,11 @@ class EffectsTab(QWidget):
                 _MISSING_PREFIX + _MISSING_SEP.join(session.describe_missing(missing))
                 if missing else _MISSING_PREFIX + _UNCOMPUTABLE_TEXT
             )
-            label = QLabel(f"{tag}・{se.source}（{slot_label}）  <code>{condition}</code>  {missing_text}")
-            label.setToolTip("\n".join(raw_lines))
+            label = QLabel(
+                f"{html.escape(tag)}・{html.escape(se.source)}（{html.escape(slot_label)}）"
+                f"  <code>{html.escape(str(condition))}</code>  {html.escape(missing_text)}"
+            )
+            label.setToolTip("<pre>" + html.escape("\n".join(raw_lines)) + "</pre>")
             label.setTextFormat(Qt.TextFormat.RichText)
             self._uncounted_layout.addWidget(label)
 

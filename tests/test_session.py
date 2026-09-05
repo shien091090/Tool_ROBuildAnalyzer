@@ -57,3 +57,30 @@ def test_active_combo_members(session):
     assert session.active_combo_members(a, 3001) == {2001, 3001}
     b = session.load_build(session.builds_dir / "b.json")
     assert session.active_combo_members(b, 1001) == set()
+
+
+def test_slot_count_of(session):
+    """I6: session.slot_count_of — 查無item_id時退回0, 不讓GUI直接碰
+    session.catalog.get()。"""
+    assert session.slot_count_of(2001) == 1
+    assert session.slot_count_of(999) == 0
+
+
+def test_price_of(session):
+    """I6: session.price_of — 查無物價時回傳None(不是0), 讓GUI能區分「物價是
+    0元」與「查無報價」兩種情況, 顯示"(無報價)"; 用真實userdata/prices.json
+    驗證(fixtures_session的make_session沒有覆寫prices_path)。"""
+    assert session.price_of("鐵匠的祝福") == 725000
+    assert session.price_of("不存在的材料") is None
+
+
+def test_equipment_for_slot(session):
+    """I6: session.equipment_for_slot — 一律經session方法查目錄, 不直接碰
+    session.catalog.equipment_for_slot()。"""
+    rows = session.equipment_for_slot("weapon", 4252)
+    assert [e.display_name for e in rows] == ["測試武器"]
+    assert session.equipment_for_slot("weapon", 4255) == []
+
+
+def test_unclassified_count_is_int(session):
+    assert isinstance(session.unclassified_count(), int)

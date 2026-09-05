@@ -85,6 +85,7 @@ def test_picker_rows_and_search(qapp, session):
 
 
 def test_panel_edit_flow_marks_dirty_and_saves(qapp, session):
+    from app.core.build import CostTargets
     from app.gui.build_panel import BuildPanel
     panel = BuildPanel("A", session)
     path = session.builds_dir / "a.json"
@@ -101,6 +102,15 @@ def test_panel_edit_flow_marks_dirty_and_saves(qapp, session):
     panel.save_to(path)
     assert not panel.dirty
     assert session.load_build(path).slots["weapon"].refine == 12
+
+    # I4回歸: 換裝(apply_item)前先掛好cost_targets, 換裝後該欄位必須被清成
+    # None — 舊cost_targets(refine_table/enchant_goal)是描述"舊道具"的養成
+    # 路徑, 對新道具完全對不上(spec §6)。
+    panel.apply_cost_targets("armor", CostTargets(refine_from=0, grade_from="none"))
+    assert panel.build.slots["armor"].cost_targets is not None
+    panel.apply_item("armor", 2001)
+    assert panel.build.slots["armor"].cost_targets is None
+
     panel.apply_item("weapon", None)
     assert "weapon" not in panel.build.slots
 
@@ -221,3 +231,121 @@ def test_cost_tab_renders_report(qapp, session):
     tab.set_results(session, "A", b, report, None, "B", b, None, "ValueError: 壞表名")
     assert "100" in tab.total_a.text() and "壞表名" in tab.total_b.text()
     assert tab.tree.topLevelItemCount() == 2
+
+
+def test_main_window_recomputes_on_startup(qapp, session):
+    """I2回歸: 建構MainWindow後(不手動呼叫recompute), 效果頁應該已經有內容,
+    panel.job_id也已經被填上(否則PickerDialog的職業過濾checkbox建不出來)。"""
+    from app.gui.main_window import MainWindow
+    win = MainWindow(session)
+    assert win.effects_tab.table.rowCount() > 0
+    assert win.panel_a.job_id == 4252
+
+
+def test_effects_tab_uncounted_escapes_raw_lua_condition(qapp):
+    """C1回歸: condition是parser保留的原始Lua if運算式, 常見`<`/`>` — 以前
+    直接嵌進RichText會被Qt當成(不完整的)標籤, 截斷`<`和下一個`>`之間的內容。
+    現在html.escape()後, 用QTextDocument轉回純文字仍應完整看到`<`兩側文字。
+    """
+    from PySide6.QtGui import QTextDocument
+
+    from app.core.aggregate import BuildEffects, SourcedEffect
+    from app.core.entries import CAT_OTHER, EffectEntry, KIND_UNRESOLVED
+    from app.gui.effects_tab import EffectsTab
+
+    entry = EffectEntry(
+        key="未判定條件", value=None, unit="", kind=KIND_UNRESOLVED, category=CAT_OTHER,
+        extra={
+            "condition": "if 49 < temp and get(19) ~= 4054 then",
+            "missing": [],
+            "raw_lines": ["AddExtParam(0, 41, 5)"],
+        },
+    )
+    se = SourcedEffect(source="X", slot_key="weapon", entry=entry)
+    eff_a = BuildEffects(sourced=[se], totals={}, unresolved=[se], others=[], warnings=[],
+                          missing_keys=set(), categories={})
+    eff_b = BuildEffects(sourced=[], totals={}, unresolved=[], others=[], warnings=[],
+                          missing_keys=set(), categories={})
+
+    class _FakeSession:
+        @staticmethod
+        def describe_missing(missing):
+            return []
+
+    tab = EffectsTab()
+    tab.set_results(_FakeSession(), "A", eff_a, "B", eff_b, [])
+
+    label = tab._uncounted_layout.itemAt(0).widget()
+    doc = QTextDocument()
+    doc.setHtml(label.text())
+    text = doc.toPlainText()
+    assert "49 < temp" in text
+    assert "4054" in text
+
+    tooltip_doc = QTextDocument()
+    tooltip_doc.setHtml(label.toolTip())
+    assert "AddExtParam(0, 41, 5)" in tooltip_doc.toPlainText()
+
+
+def test_effects_tab_unknown_category_still_rendered(qapp):
+    """M9回歸: category不在CATEGORY_ORDER窮舉表裡的列以前會被by_cat.get()
+    無視、整列消失 — 現在改成照樣附加在已知分類後面顯示, 標題用原始字串。"""
+    from app.core.compare import CompareRow
+    from app.gui.effects_tab import EffectsTab
+    from tests.fixtures_session import make_session
+
+    row = CompareRow(key="X", unit="", category="weird", a=1.0, b=None, advantage="a")
+    tab = EffectsTab()
+    tab._fill_table([row])
+    texts = [tab.table.item(r, 0).text() for r in range(tab.table.rowCount()) if tab.table.item(r, 0)]
+    assert "X" in texts
+    assert "weird" in texts
+
+
+def test_cost_tab_fill_card_handles_no_report_no_error(qapp, session):
+    """M10回歸: report/err皆為None時_fill_card以前會直接dereference report
+    炸AttributeError — 現在應該顯示空狀態而不拋例外。"""
+    from app.gui.cost_tab import CostTab
+    b = session.load_build(session.builds_dir / "a.json")
+    tab = CostTab()
+    tab.set_results(session, "A", b, None, None, "B", b, None, None)
+    assert tab.total_a.text() != ""
+
+
+def test_build_panel_combo_load_error_shows_message_and_keeps_build(qapp, session, monkeypatch):
+    """I3回歸(a): 切檔combo選到壞json時, 不應該讓ValueError/JSONDecodeError
+    直接往上炸掉整個process — 應該顯示提示、combo復原、目前build不變。"""
+    from app.gui.build_panel import BuildPanel
+
+    bad_path = session.builds_dir / "bad.json"
+    bad_path.write_text('{"name": "bad", "slots": {"nope": {"item_id": 1}}}', encoding="utf-8")
+
+    panel = BuildPanel("A", session)
+    a_path = session.builds_dir / "a.json"
+    panel.set_build(session.load_build(a_path), a_path)
+
+    recorded = []
+    monkeypatch.setattr(panel, "_show_load_error", lambda text: recorded.append(text))
+
+    panel._reload_file_combo()
+    panel._sync_file_combo_selection()
+    idx = panel.file_combo.findText("bad.json")
+    assert idx >= 0
+    panel.file_combo.setCurrentIndex(idx)
+
+    assert recorded and "bad.json" in recorded[0]
+    assert panel.path.name == "a.json"
+    assert "armor" in panel.build.slots
+
+
+def test_main_window_bad_initial_build_falls_back_and_shows_error(qapp, session):
+    """I3回歸(b): 啟動時第一個(字母序)配裝檔壞掉, MainWindow仍要能正常建構
+    完成(不拋例外), 該面板退回空白新配裝, 效果頁顯示載入失敗訊息。"""
+    from app.gui.main_window import MainWindow
+
+    bad_path = session.builds_dir / "0bad.json"
+    bad_path.write_text('{"name": "bad", "slots": {"nope": {"item_id": 1}}}', encoding="utf-8")
+
+    win = MainWindow(session)
+    assert win.panel_a.build.name == "未命名"
+    assert "0bad.json" in win.effects_tab.error_label.text()

@@ -7,7 +7,7 @@
 
 chips規則(T5只畫, T6接點擊事件):
     一般裝備(GENERAL_SLOTS): 卡片chip(chip_card) x len(cards), 若插槽數(由
-        session.catalog查item的slot_count, 查無資料視為0)大於已插卡片數,
+        session.slot_count_of查item的slot_count, 查無資料視為0)大於已插卡片數,
         補一顆「+ 卡片」(chip_add); 附魔chip(chip_enchant) x 已選(非None)的
         enchants項, 若附魔池槽位數(session.enchant_pools)大於已選數,
         補一顆「+ 附魔」(chip_add)。
@@ -210,8 +210,7 @@ class SlotWidget(QFrame):
         for i, card_id in enumerate(cfg.cards):
             self._add_chip(session.item_display(card_id), "chip_card",
                             lambda _checked=False, i=i: self.card_clicked.emit(i))
-        entry = session.catalog.get(cfg.item_id)
-        slot_count = entry.slot_count if entry is not None else 0
+        slot_count = session.slot_count_of(cfg.item_id)
         if slot_count > len(cfg.cards):
             self._add_chip(_ADD_CARD_TEXT, "chip_add", self.add_card_clicked.emit)
 
