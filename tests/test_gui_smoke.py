@@ -153,3 +153,16 @@ def test_refine_label_always_shown_when_equipped_except_costume(qapp, session):
     costume_widget = panel.slot_widgets["costume_top"]
     costume_widget.set_config(SlotConfig(item_id=2001), session)
     assert costume_widget.refine_label.isVisibleTo(costume_widget) is False
+
+
+def test_effects_tab_renders_rows_and_uncounted(qapp, session):
+    from app.gui.effects_tab import fmt_value
+    from app.gui.main_window import MainWindow
+    assert fmt_value(12.0, "%") == "+12%" and fmt_value(-0.5, "秒") == "-0.5秒" and fmt_value(None, "") == "—"
+    win = MainWindow(session)
+    win.recompute()
+    tab = win.effects_tab
+    texts = [tab.table.item(r, 0).text() for r in range(tab.table.rowCount()) if tab.table.item(r, 0)]
+    assert "ATK" in texts and "傷害" in texts
+    assert "請以道具敘述為準" in tab.note_label.text()
+    assert win.panel_a.job_id == 4252

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from app.core.build import Character, new_build
 from app.gui.build_panel import BuildPanel
+from app.gui.effects_tab import EffectsTab
 
 _NO_CHARACTER_TEXT = "(無角色檔, 請在userdata/characters建立)"
 _WINDOW_TITLE = "RO Build Analyzer"
@@ -25,6 +26,7 @@ _DATA_LABEL_FORMAT = "資料: {} 匯入"
 _UNKNOWN_IMPORT_DATE = "未知"
 _TAB_EFFECTS_TEXT = "效果結算"
 _TAB_COST_TEXT = "成本估算"
+_NO_CHARACTER_ERROR_TEXT = "請先在userdata/characters建立角色檔"
 
 
 class MainWindow(QMainWindow):
@@ -71,7 +73,8 @@ class MainWindow(QMainWindow):
         center_row.addWidget(panels_widget, 47)
 
         self.tabs = QTabWidget()
-        self.tabs.addTab(QWidget(), _TAB_EFFECTS_TEXT)
+        self.effects_tab = EffectsTab()
+        self.tabs.addTab(self.effects_tab, _TAB_EFFECTS_TEXT)
         self.tabs.addTab(QWidget(), _TAB_COST_TEXT)
         center_row.addWidget(self.tabs, 53)
 
@@ -122,4 +125,19 @@ class MainWindow(QMainWindow):
         return self._session.load_character(paths[index])
 
     def recompute(self) -> None:
-        pass
+        character = self.current_character()
+        for p in (self.panel_a, self.panel_b):
+            p.job_id = character.job if character else None
+        if character is None:
+            self.effects_tab.show_error(_NO_CHARACTER_ERROR_TEXT)
+            return
+        try:
+            eff_a = self._session.evaluate(self.panel_a.build, character)
+            eff_b = self._session.evaluate(self.panel_b.build, character)
+            rows = self._session.compare(eff_a, eff_b)
+            self.effects_tab.set_results(
+                self._session, self.panel_a.build.name, eff_a, self.panel_b.build.name, eff_b, rows
+            )
+        except Exception as e:  # 不吞: 顯示在頁面
+            self.effects_tab.show_error(f"{type(e).__name__}: {e}")
+        # T8在此之後接成本估算頁的重算(cost_tab.set_results(...))
