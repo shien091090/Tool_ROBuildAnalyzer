@@ -93,6 +93,24 @@ py -3.12-64 -m app.cli cost userdata/builds/sample_a.json
 
 Windows終端機輸出中文若出現亂碼, 可加上 `PYTHONIOENCODING=utf-8` 環境變數。
 
+## M4: GUI
+
+需先完成上方「執行方式」的M1匯入步驟(產出 `data/ro_items.db` 與 `config.json`)。
+
+安裝PySide6:
+
+```
+py -3.12-64 -m pip install "PySide6>=6.8"
+```
+
+啟動(同樣須在repo根目錄以模組方式執行):
+
+```
+py -3.12-64 -m app.gui
+```
+
+角色檔請先手動放在 `userdata/characters`(角色檔編輯UI為M5)。
+
 ## 測試
 
 ```
