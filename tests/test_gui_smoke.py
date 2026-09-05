@@ -166,3 +166,36 @@ def test_effects_tab_renders_rows_and_uncounted(qapp, session):
     assert "ATK" in texts and "傷害" in texts
     assert "請以道具敘述為準" in tab.note_label.text()
     assert win.panel_a.job_id == 4252
+
+
+def test_fmt_value_normalizes_negative_zero():
+    """fix round1 Important1回歸: parser.py會產生負值運算, -0.0若不正規化,
+    ":g"格式化會印成"-0", 疊上恆顯示的"+"號變成錯誤的"+-0%"。"""
+    from app.gui.effects_tab import fmt_value
+    assert fmt_value(-0.0, "%") == "+0%"
+    assert fmt_value(0.0, "") == "+0"
+    assert fmt_value(0.5, "秒") == "+0.5秒"
+
+
+def test_effects_tab_show_error_clears_prior_results(qapp, session):
+    """fix round1 Important2回歸: show_error()以前只顯示error_label, 沒清掉
+    上一次recompute留下的table/未計入/其他/warnings — 使用者可能把錯誤banner
+    下面的舊數字誤讀成目前結果。"""
+    from app.gui.main_window import MainWindow
+    win = MainWindow(session)
+    win.recompute()
+    tab = win.effects_tab
+    assert tab.table.rowCount() > 0
+    assert tab.error_label.isVisibleTo(tab) is False
+
+    tab.show_error("boom")
+    assert tab.table.rowCount() == 0
+    assert tab.error_label.isVisibleTo(tab) is True
+    assert "boom" in tab.error_label.text()
+    assert tab._uncounted_layout.count() == 0
+    assert tab._others_layout.count() == 0
+    assert tab.warnings_label.isVisibleTo(tab) is False
+
+    win.recompute()
+    assert tab.table.rowCount() > 0
+    assert tab.error_label.isVisibleTo(tab) is False

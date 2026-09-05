@@ -52,8 +52,21 @@ _TABLE_FONT_FAMILY = "Consolas"
 def fmt_value(value: float | None, unit: str) -> str:
     if value is None:
         return _DASH_TEXT
+    if value == 0:
+        value = 0.0  # 正規化負零(-0.0): 避免":g"把它印成"-0"導致"+-0%"
     sign = "+" if value >= 0 else ""
     return f"{sign}{value:g}{unit}"
+
+
+def _clear_layout(layout) -> None:
+    """清空一個QVBoxLayout裡所有子widget — _fill_uncounted/_fill_others/
+    show_error共用, 避免各自複製同一段takeAt/deleteLater迴圈。"""
+    while layout.count():
+        item = layout.takeAt(0)
+        w = item.widget()
+        if w is not None:
+            w.setParent(None)
+            w.deleteLater()
 
 
 class EffectsTab(QWidget):
@@ -129,6 +142,21 @@ class EffectsTab(QWidget):
         self._others_body.setVisible(checked)
 
     def show_error(self, text: str) -> None:
+        """顯示錯誤前先清掉舊的成功結果 — 否則錯誤banner之下還留著上一次
+        recompute的table/未計入/其他/warnings, 使用者可能誤把舊數字當成
+        目前結果讀。"""
+        self.table.clearContents()
+        self.table.setRowCount(0)
+
+        _clear_layout(self._uncounted_layout)
+        self.uncounted_box.setTitle(_UNCOUNTED_TITLE_FORMAT.format(0))
+
+        _clear_layout(self._others_layout)
+        self._others_toggle.setText(_OTHERS_TITLE_FORMAT.format(0))
+
+        self.warnings_label.setText("")
+        self.warnings_label.setVisible(False)
+
         self.error_label.setText(text)
         self.error_label.setVisible(True)
 
@@ -184,12 +212,7 @@ class EffectsTab(QWidget):
                 r += 1
 
     def _fill_uncounted(self, session, eff_a, eff_b) -> None:
-        while self._uncounted_layout.count():
-            item = self._uncounted_layout.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.setParent(None)
-                w.deleteLater()
+        _clear_layout(self._uncounted_layout)
 
         entries = [("A", se) for se in eff_a.unresolved] + [("B", se) for se in eff_b.unresolved]
         self.uncounted_box.setTitle(_UNCOUNTED_TITLE_FORMAT.format(len(entries)))
@@ -211,12 +234,7 @@ class EffectsTab(QWidget):
             self._uncounted_layout.addWidget(label)
 
     def _fill_others(self, name_a: str, eff_a, name_b: str, eff_b) -> None:
-        while self._others_layout.count():
-            item = self._others_layout.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.setParent(None)
-                w.deleteLater()
+        _clear_layout(self._others_layout)
 
         entries = [("A", se) for se in eff_a.others] + [("B", se) for se in eff_b.others]
         self._others_toggle.setText(_OTHERS_TITLE_FORMAT.format(len(entries)))
