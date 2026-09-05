@@ -188,6 +188,59 @@ def load_build(path) -> Build:
     return Build(name=data["name"], slots=slots)
 
 
+def build_to_dict(build: Build) -> dict:
+    """Serialize a Build back to the userdata/builds/*.json shape (spec §6).
+
+    依SLOT_IDS順序輸出各格(GUI存檔時穩定的鍵順序, 方便diff); 每格的預設值
+    (refine=0/grade="none"/cards=[]/enchants全空)省略不寫, 跟load_build的
+    預設值互為逆操作(load時省略的鍵回填成這些預設值, 存時這些預設值又省略
+    回去) — 存出來的檔案才會跟使用者手寫的極簡格式一樣精簡, 不會每次存檔
+    都把所有預設值都攤平寫死進去。enchants清單尾端的None(未附滿的槽)修剪掉
+    (只有中間/開頭的None才有意義, 代表「這格故意跳過」), 沒有意義的尾端
+    None不寫入檔案。
+    """
+    slots: dict[str, dict] = {}
+    for slot_key in SLOT_IDS:
+        cfg = build.slots.get(slot_key)
+        if cfg is None:
+            continue
+        d: dict = {"item_id": cfg.item_id}
+        if cfg.refine:
+            d["refine"] = cfg.refine
+        if cfg.grade != "none":
+            d["grade"] = cfg.grade
+        if cfg.cards:
+            d["cards"] = list(cfg.cards)
+        enchants = list(cfg.enchants)
+        while enchants and enchants[-1] is None:
+            enchants.pop()
+        if enchants:
+            d["enchants"] = enchants
+        if cfg.cost_targets is not None:
+            ct = cfg.cost_targets
+            ctd: dict = {"refine_from": ct.refine_from, "grade_from": ct.grade_from, "enchant_strategy": ct.enchant_strategy}
+            if ct.refine_table is not None:
+                ctd["refine_table"] = ct.refine_table
+            if ct.enchant_goal is not None:
+                ctd["enchant_goal"] = [ct.enchant_goal[0], ct.enchant_goal[1]]
+            d["cost_targets"] = ctd
+        slots[slot_key] = d
+    return {"name": build.name, "slots": slots}
+
+
+def save_build(build: Build, path) -> None:
+    """存Build到JSON檔(GUI存檔唯一入口) — build_to_dict()的輸出直接寫檔,
+    UTF-8+不轉義中文(ensure_ascii=False)+2格縮排方便人工檢視/diff, 檔尾補
+    換行符(符合一般文字檔慣例)。
+    """
+    Path(path).write_text(json.dumps(build_to_dict(build), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def new_build(name: str) -> Build:
+    """建一個空白配裝(GUI「新增配裝」入口) — 沒有任何格, 使用者從空白開始逐格填。"""
+    return Build(name=name, slots={})
+
+
 def load_character(path) -> Character:
     """Load a Character from userdata/characters/*.json (spec §5.2).
 

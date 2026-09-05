@@ -2,7 +2,16 @@ import json
 
 import pytest
 
-from app.core.build import CostTargets, GRADE_LEVELS, SLOT_IDS, load_build, load_character
+from app.core.build import (
+    CostTargets,
+    GRADE_LEVELS,
+    SLOT_IDS,
+    build_to_dict,
+    load_build,
+    load_character,
+    new_build,
+    save_build,
+)
 
 
 def test_slot_ids_has_20_keys():
@@ -194,3 +203,26 @@ def test_load_character_empty_skills_defaults(tmp_path):
     character = load_character(path)
 
     assert character.skills == {}
+
+
+def test_build_roundtrip_and_default_omission(tmp_path):
+    src = tmp_path / "b.json"
+    src.write_text(json.dumps({"name": "n", "slots": {
+        "weapon": {"item_id": 1, "refine": 12, "grade": "B", "cards": [2, 2], "enchants": ["X", None, None],
+                   "cost_targets": {"refine_from": 0, "grade_from": "none", "refine_table": "ether_weapon5",
+                                    "enchant_strategy": "last_slot_only", "enchant_goal": [3, "X"]}},
+        "armor": {"item_id": 3}}}, ensure_ascii=False), encoding="utf-8")
+    b = load_build(src)
+    d = build_to_dict(b)
+    assert list(d["slots"]) == ["armor", "weapon"]              # SLOT_IDS順序
+    assert d["slots"]["armor"] == {"item_id": 3}                 # 預設值省略
+    assert d["slots"]["weapon"]["enchants"] == ["X"]             # 尾端None修剪
+    assert d["slots"]["weapon"]["cost_targets"]["enchant_goal"] == [3, "X"]
+    out = tmp_path / "o.json"
+    save_build(b, out)
+    assert build_to_dict(load_build(out)) == d
+
+
+def test_new_build_is_empty():
+    b = new_build("空")
+    assert b.name == "空" and b.slots == {}

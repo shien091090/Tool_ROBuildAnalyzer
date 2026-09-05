@@ -127,7 +127,7 @@ def _row_tuple(row: EnchantRow | dict) -> tuple[int, str | None, str, int]:
     )
 
 
-def _rows_for_item(
+def rows_for_item(
     reader: DbReader, manual: dict, item_internal_name: str
 ) -> tuple[str | int | None, list[tuple[int, str | None, str, int]]] | None:
     """找item對應的附魔列: 先查enchant_tables(自動匯入), 查無再fallback查
@@ -236,7 +236,7 @@ def enchant_table_slots(
     要不要直接沿用solve_enchant的null result(含統一警告文字), 不在這裡另外
     重複組一份訊息。
     """
-    found = _rows_for_item(reader, manual, item_internal_name)
+    found = rows_for_item(reader, manual, item_internal_name)
     if found is None:
         return None
     _table_index, rows = found
@@ -266,7 +266,7 @@ def solve_enchant(
     prices = prices or {}
     exchange_recipes = exchange_recipes or {}
 
-    found = _rows_for_item(reader, manual, item_internal_name)
+    found = rows_for_item(reader, manual, item_internal_name)
     if found is None:
         return EnchantCostResult(
             expected_rounds=Fraction(0),
@@ -393,3 +393,7 @@ def solve_enchant(
         warnings=[*warnings, *comparison_warnings],
         available=True,
     )
+
+
+# task-4 brief: 對外公開rows_for_item(session.py消費), 舊私有名保留別名相容既有呼叫點。
+_rows_for_item = rows_for_item

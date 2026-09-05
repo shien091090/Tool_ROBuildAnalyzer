@@ -41,8 +41,7 @@ from app.core.cost.rules import load_prices, load_rules
 from app.core.db_reader import DbReader
 from app.core.entries import CAT_ABILITY, CAT_DAMAGE, CAT_OTHER, CAT_RESIST, CAT_SECONDARY
 from app.core.maps import make_maps
-from importer.config import ConfigInvalidError, ConfigNotFoundError
-from importer.config import load as load_config
+from app.core.session import resolve_db_path
 
 _CATEGORY_ORDER = [CAT_DAMAGE, CAT_RESIST, CAT_ABILITY, CAT_SECONDARY, CAT_OTHER]
 _CATEGORY_LABEL = {
@@ -52,14 +51,6 @@ _CATEGORY_LABEL = {
     CAT_SECONDARY: "次要能力",
     CAT_OTHER: "其他",
 }
-
-
-def resolve_db_path(config_path: str = "config.json") -> str:
-    """config.json 的 db_path 欄位(不存在/不合法時退回預設 data/ro_items.db)."""
-    try:
-        return load_config(config_path).db_path
-    except (ConfigNotFoundError, ConfigInvalidError):
-        return "data/ro_items.db"
 
 
 def _signed(value: float, unit: str) -> str:
