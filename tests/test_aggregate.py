@@ -288,3 +288,15 @@ def test_evaluate_build_enableskill_cross_item_feeds_later_condition(effects):
         se.entry.kind == KIND_UNRESOLVED and se.slot_key == "weapon" for se in effects.sourced
     )
     assert effects.totals[("CRI", "")] == 0.0
+
+
+def test_make_context_pure_jobs_expands_lineage():
+    ch = Character(name="x", job=4252, base_lv=1, job_lv=1, stats={}, traits={}, skills={})
+    ctx = make_context(ch, Build(name="b", slots={}), reader=None)
+    assert 4054 in ctx.pure_jobs and 4252 in ctx.pure_jobs
+
+
+def test_make_context_pure_jobs_unknown_job_single():
+    ch = Character(name="x", job=9999, base_lv=1, job_lv=1, stats={}, traits={}, skills={})
+    ctx = make_context(ch, Build(name="b", slots={}), reader=None)
+    assert ctx.pure_jobs == [9999]

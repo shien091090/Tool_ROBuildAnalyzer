@@ -24,6 +24,7 @@ from app.core.build import GRADE_LEVELS, SLOT_IDS, Build, Character
 from app.core.context import CalcContext
 from app.core.db_reader import DbReader
 from app.core.entries import EffectEntry, KIND_NUMERIC, KIND_UNRESOLVED
+from app.core.jobs import pure_jobs_for
 from app.core.maps import EffectMaps
 from app.core.parser import parse_effect_block
 
@@ -114,7 +115,7 @@ def make_context(character: Character, build: Build, reader: DbReader) -> CalcCo
         grade=grade,
         get_values=get_values,
         enabled_skill_levels=dict(character.skills),
-        pure_jobs=[character.job],
+        pure_jobs=pure_jobs_for(character.job),
         slot_item_id_map=slot_item_id_map,
         weapon_level_map={},
         armor_level_map={},

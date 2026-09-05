@@ -3,17 +3,19 @@
 compare_builds() takes two BuildEffects and produces a list of CompareRow,
 one per (key, unit) from the union of both builds' totals.
 
-Advantage determination (M2 behavior — see caveat below):
-- Both values present → advantage goes to the build with larger value
+Advantage determination:
+- Both values present, both negative → advantage goes to the MORE negative
+  value (spec §9.1: 皆負代表消耗/詠唱時間等「越負越好」的削減類效果, 例如
+  兩邊都是"SP消耗"減免, -7%比-3%更省, 應判-7%那方勝)
+- Both values present, not both negative → advantage goes to the larger value
 - Values equal → "tie"
 - One value None → advantage goes to the build with a value
 - Both None → "" (reserved for incomparable case; unreachable from union)
 
-CAVEAT: Negative effects (e.g., "SP消耗" cost reductions, healing cooldown
-reductions) are NOT special-cased for direction. M2 implementation treats
-"larger value = advantage" uniformly across all keys. UI phase may revisit
-this logic to negate specific keys before comparison. For now, we simply
-implement the contract: biggest value wins.
+CAVEAT/已知限制: 這條「皆負時更負者勝」規則假設同一個key兩邊都是負值時,
+負值一律代表削減類效果的加強(對玩家有利)。若某個key的負值其實是劣勢(例如
+兩邊都是"ATK"的負向減益, 更負代表更差), 此規則會判反。目前資料中這種情況
+罕見(負值key幾乎都是消耗/詠唱/延遲類削減), 故接受此限制。
 """
 
 from dataclasses import dataclass
@@ -58,10 +60,11 @@ def compare_builds(a: BuildEffects, b: BuildEffects) -> list[CompareRow]:
         if val_a is not None and val_b is not None:
             if val_a == val_b:
                 advantage = "tie"
-            elif val_a > val_b:
-                advantage = "a"
+            elif val_a < 0 and val_b < 0:
+                # spec §9.1: 皆負(減傷/詠唱/消耗類)更負者勝
+                advantage = "a" if val_a < val_b else "b"
             else:
-                advantage = "b"
+                advantage = "a" if val_a > val_b else "b"
         elif val_a is not None:
             advantage = "a"
         elif val_b is not None:

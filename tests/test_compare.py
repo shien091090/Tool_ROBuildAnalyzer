@@ -329,3 +329,21 @@ def test_compare_row_fields():
     # Frozen means it cannot be modified
     with pytest.raises(AttributeError):
         row.a = 200.0
+
+
+def test_both_negative_more_negative_wins():
+    a = _make_build_effects({("SP消耗", "%"): -7.0})
+    b = _make_build_effects({("SP消耗", "%"): -3.0})
+    assert compare_builds(a, b)[0].advantage == "a"
+
+
+def test_mixed_sign_larger_wins():
+    a = _make_build_effects({("ATK", ""): -10.0})
+    b = _make_build_effects({("ATK", ""): 5.0})
+    assert compare_builds(a, b)[0].advantage == "b"
+
+
+def test_both_positive_larger_wins_unchanged():
+    a = _make_build_effects({("ATK", ""): 10.0})
+    b = _make_build_effects({("ATK", ""): 15.0})
+    assert compare_builds(a, b)[0].advantage == "b"
