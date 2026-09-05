@@ -474,6 +474,13 @@ def _try_variable_assignment(
     m = _RE_MATH_FLOOR_ASSIGN.match(line)
     if m:
         var, inner_expr = m.groups()
+        # Controller ruling (task-1 fix round 1): pop any stale unresolved_vars
+        # entry for this name UNCONDITIONALLY, before anything else, so a
+        # reassignment that fails for a DIFFERENT (or no) reason never leaves
+        # a prior attempt's missing-key attribution hanging around under the
+        # same variable name. Re-populated below only if THIS attempt is
+        # itself missing-character-data-attributable.
+        unresolved_vars.pop(var, None)
         value = lua_expr.safe_eval(f"math.floor({inner_expr})", variables, ctx, slot_id)
         if value is None:
             missing, via = _line_missing(inner_expr, variables, ctx, slot_id, unresolved_vars)
@@ -484,7 +491,6 @@ def _try_variable_assignment(
                 trace.append(f"⚠️ 無法計算 `{var}` = floor({inner_expr})")
         else:
             variables[var] = value
-            unresolved_vars.pop(var, None)
             trace.append(f"📌 `{var}` = {value}（floor({inner_expr})）")
         return True
 
@@ -493,6 +499,11 @@ def _try_variable_assignment(
     m = _RE_GENERAL_ASSIGN.match(line)
     if m:
         var, expr = m.groups()
+        # Same unconditional pop as V7 above (controller ruling, task-1 fix
+        # round 1) — must happen before the string/table/function-def early
+        # return too, since THAT path also reassigns `var` to something with
+        # nothing to do with any earlier missing-skill/get/scalar attempt.
+        unresolved_vars.pop(var, None)
         if any(token in expr for token in ('"', "'", "{", "function")):
             return True
         value = lua_expr.safe_eval(expr, variables, ctx, slot_id)
@@ -505,7 +516,6 @@ def _try_variable_assignment(
                 trace.append(f"⚠️ 無法計算 `{var}` = {expr}")
         else:
             variables[var] = value
-            unresolved_vars.pop(var, None)
             trace.append(f"📌 `{var}` = {value}")
         return True
 

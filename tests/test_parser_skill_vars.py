@@ -83,3 +83,17 @@ def test_unknown_function_using_unresolved_variable_becomes_unresolved():
     r = parser.parse_effect_block(block, _ctx(), None, _maps())
     assert _kinds(r) == [entries.KIND_UNRESOLVED]
     assert r.entries[0].extra["missing"] == ["skill:1"]
+
+
+def test_failed_string_reassignment_clears_stale_missing():
+    block = 'a = GetSkillLevel(1)\na = "x"\nAddExtParam(0, 41, a)'
+    r = parser.parse_effect_block(block, _ctx(), 2, _maps())
+    assert len(r.entries) == 1
+    assert _kinds(r) == [entries.KIND_UNRECOGNIZED]
+
+
+def test_failed_eval_reassignment_clears_stale_missing():
+    block = "a = GetSkillLevel(1)\na = undefined_thing + 1\nAddExtParam(0, 41, a)"
+    r = parser.parse_effect_block(block, _ctx(), 2, _maps())
+    assert len(r.entries) == 1
+    assert _kinds(r) == [entries.KIND_UNRECOGNIZED]
