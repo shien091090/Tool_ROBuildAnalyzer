@@ -55,6 +55,7 @@ COSTUME_SLOTS = SLOT_SECTIONS[1][1]
 SHADOW_SLOTS = SLOT_SECTIONS[2][1]
 
 _UNEQUIPPED_TEXT = "— 未裝備(點擊選擇)"
+_COST_TARGETS_MARKER = " $"
 _ADD_CARD_TEXT = "+ 卡片"
 _ADD_ENCHANT_TEXT = "+ 附魔"
 _ADD_STONE_TEXT = "+ 強化石"
@@ -166,6 +167,9 @@ class SlotWidget(QFrame):
         self._cfg = cfg
         self._clear_chips()
 
+        has_cost_targets = cfg is not None and cfg.cost_targets is not None
+        self.slot_label.setText(SLOT_LABELS[self.slot_key] + (_COST_TARGETS_MARKER if has_cost_targets else ""))
+
         if cfg is None:
             self.name_label.setText(_UNEQUIPPED_TEXT)
             self.name_label.setProperty("dim", True)
@@ -264,7 +268,7 @@ class SlotWidget(QFrame):
         grade_action = menu.addAction(_MENU_GRADE_TEXT) if equipped and is_general else None
         clear_action = menu.addAction(_MENU_CLEAR_TEXT)
         cost_action = menu.addAction(_MENU_COST_TARGETS_TEXT)
-        cost_action.setEnabled(False)  # T8接成本設定對話框, T6先放著disabled
+        cost_action.setEnabled(equipped)  # 未裝備的格沒有item_id, 無從查refine_table/enchant_pools
         chosen = menu.exec(event.globalPos())
         if chosen is None:
             return

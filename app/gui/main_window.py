@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from app.core.build import Character, new_build
 from app.gui.build_panel import BuildPanel
+from app.gui.cost_tab import CostTab
 from app.gui.effects_tab import EffectsTab
 
 _NO_CHARACTER_TEXT = "(無角色檔, 請在userdata/characters建立)"
@@ -75,7 +76,8 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.effects_tab = EffectsTab()
         self.tabs.addTab(self.effects_tab, _TAB_EFFECTS_TEXT)
-        self.tabs.addTab(QWidget(), _TAB_COST_TEXT)
+        self.cost_tab = CostTab()
+        self.tabs.addTab(self.cost_tab, _TAB_COST_TEXT)
         center_row.addWidget(self.tabs, 53)
 
         root.addLayout(center_row, 1)
@@ -128,6 +130,21 @@ class MainWindow(QMainWindow):
         character = self.current_character()
         for p in (self.panel_a, self.panel_b):
             p.job_id = character.job if character else None
+
+        # 成本估算不需要角色檔(cost_targets/裝備本體資訊全在build本身), 不論
+        # 上面character是否選到都要跑; 兩側各自獨立try/except(不吞: 讓
+        # refine_table查無等ValueError顯示在該側卡片, 不擋另一側或效果頁)。
+        results = []
+        for panel in (self.panel_a, self.panel_b):
+            try:
+                results.append((self._session.cost(panel.build), None))
+            except Exception as e:
+                results.append((None, f"{type(e).__name__}: {e}"))
+        self.cost_tab.set_results(
+            self._session, self.panel_a.build.name, self.panel_a.build, *results[0],
+            self.panel_b.build.name, self.panel_b.build, *results[1],
+        )
+
         if character is None:
             self.effects_tab.show_error(_NO_CHARACTER_ERROR_TEXT)
             return
@@ -140,4 +157,3 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:  # 不吞: 顯示在頁面
             self.effects_tab.show_error(f"{type(e).__name__}: {e}")
-        # T8在此之後接成本估算頁的重算(cost_tab.set_results(...))

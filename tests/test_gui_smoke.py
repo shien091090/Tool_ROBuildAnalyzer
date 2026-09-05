@@ -199,3 +199,25 @@ def test_effects_tab_show_error_clears_prior_results(qapp, session):
     win.recompute()
     assert tab.table.rowCount() > 0
     assert tab.error_label.isVisibleTo(tab) is False
+
+
+def test_cost_tab_renders_report(qapp, session):
+    from fractions import Fraction
+    from app.core.build import CostTargets, SlotConfig
+    from app.core.cost.report import BuildCostReport, ItemCostReport
+    from app.gui.cost_tab import CostTab, fmt_zeny, path_text
+    assert fmt_zeny(Fraction(1234567)) == "1,234,567"
+    cfg = SlotConfig(item_id=2001, refine=13, grade="A",
+                     cost_targets=CostTargets(refine_from=0, grade_from="none", refine_table="ether_armor2"))
+    assert path_text(cfg) == "無階+0 → A階+13"
+    item = ItemCostReport(slot_key="armor", item_name="測試鎧甲", direct={"乙太鋁": Fraction(3)}, grade_fee=Fraction(0),
+                          enchant_zeny=Fraction(0), refine_fee=Fraction(100), intermediates={}, base={"乙太星塵": Fraction(9)},
+                          exchange_fee=Fraction(0), body_count=Fraction(1), zeny_total=Fraction(100),
+                          warnings=["附魔查無附魔表, 附魔成本略過"])
+    report = BuildCostReport(items=[item], zeny_total=Fraction(100), warnings=[])
+    b = session.load_build(session.builds_dir / "a.json")
+    b.slots["armor"] = cfg
+    tab = CostTab()
+    tab.set_results(session, "A", b, report, None, "B", b, None, "ValueError: 壞表名")
+    assert "100" in tab.total_a.text() and "壞表名" in tab.total_b.text()
+    assert tab.tree.topLevelItemCount() == 2

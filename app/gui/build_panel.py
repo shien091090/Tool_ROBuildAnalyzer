@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.build import Build, CostTargets, SlotConfig, new_build
+from app.gui.cost_targets_dialog import CostTargetsDialog
 from app.gui.picker_dialog import CLEAR, PickerDialog
 from app.gui.slot_widget import COSTUME_SLOTS, GENERAL_SLOTS, SLOT_SECTIONS, SlotWidget
 
@@ -345,7 +346,12 @@ class BuildPanel(QFrame):
             self.apply_stone(slot_key, result)
 
     def _on_cost_targets_requested(self, slot_key: str) -> None:
-        pass  # T8接成本設定對話框; 右鍵選單項目T6先disabled, 此訊號目前不會被觸發
+        cfg = self._build.slots.get(slot_key)
+        if cfg is None:
+            return
+        accepted, ct = CostTargetsDialog.edit(self, self._session, slot_key, cfg)
+        if accepted:
+            self.apply_cost_targets(slot_key, ct)
 
     def _on_slot_hovered(self, slot_key: str, on: bool) -> None:
         if not on:
