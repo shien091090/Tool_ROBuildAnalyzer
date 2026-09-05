@@ -63,6 +63,8 @@ _GRADE_LETTERS = {"D": "D", "C": "C", "B": "B", "A": "A"}
 _SLOT_HEIGHT = 28
 _LABEL_WIDTH = 70
 
+_MENU_REFINE_TEXT = "設定精煉…"
+_MENU_GRADE_TEXT = "設定階級…"
 _MENU_CLEAR_TEXT = "清空此格"
 _MENU_COST_TARGETS_TEXT = "成本設定…"
 
@@ -179,7 +181,10 @@ class SlotWidget(QFrame):
         is_costume = self.slot_key in COSTUME_SLOTS
         is_general = self.slot_key in GENERAL_SLOTS
 
-        if not is_costume and cfg.refine > 0:
+        if not is_costume:
+            # controller ruling(fix round1第3點, 覆蓋brief規則2原本的"refine>0才
+            # 顯示"): 已裝備的GENERAL/SHADOW格恆顯示精煉值(含+0), 否則使用者永遠
+            # 沒有實際可點的目標能把精煉從0設起來。服飾格依然沒有精煉概念, 永不顯示。
             self.refine_label.setText(f"+{cfg.refine}")
             self.refine_label.setVisible(True)
         else:
@@ -247,12 +252,27 @@ class SlotWidget(QFrame):
         super().mousePressEvent(event)
 
     def contextMenuEvent(self, event) -> None:
+        """fix round1第3點: 「設定精煉…」/「設定階級…」補在「清空此格」前面,
+        給已裝備格一個一定找得到的精煉/階級編輯入口(不用再賭blank-space
+        click的窄邊margin) — 只在該格「已裝備且該slot類型支援」時才加進選單。
+        """
         menu = QMenu(self)
+        equipped = self._cfg is not None
+        is_costume = self.slot_key in COSTUME_SLOTS
+        is_general = self.slot_key in GENERAL_SLOTS
+        refine_action = menu.addAction(_MENU_REFINE_TEXT) if equipped and not is_costume else None
+        grade_action = menu.addAction(_MENU_GRADE_TEXT) if equipped and is_general else None
         clear_action = menu.addAction(_MENU_CLEAR_TEXT)
         cost_action = menu.addAction(_MENU_COST_TARGETS_TEXT)
         cost_action.setEnabled(False)  # T8接成本設定對話框, T6先放著disabled
         chosen = menu.exec(event.globalPos())
-        if chosen is clear_action:
+        if chosen is None:
+            return
+        if chosen is refine_action:
+            self.refine_clicked.emit()
+        elif chosen is grade_action:
+            self.grade_clicked.emit()
+        elif chosen is clear_action:
             self.clear_requested.emit()
         elif chosen is cost_action:
             self.cost_targets_requested.emit()

@@ -103,3 +103,53 @@ def test_panel_edit_flow_marks_dirty_and_saves(qapp, session):
     assert session.load_build(path).slots["weapon"].refine == 12
     panel.apply_item("weapon", None)
     assert "weapon" not in panel.build.slots
+
+
+def test_save_as_reload_combo_does_not_swap_visible_build(qapp, session):
+    """fix round1 Critical1回歸: _reload_file_combo()以前沒擋訊號, clear()+第
+    一個addItem()各自觸發currentIndexChanged(0), 會被_on_file_combo_changed
+    誤當成「使用者選了字母序第一個檔案」載入, 蓋掉剛存好的build(dirty已被
+    save_to清掉, guard擋不住)。"""
+    from app.gui.build_panel import BuildPanel
+    panel = BuildPanel("A", session)
+    path = session.builds_dir / "a.json"
+    panel.set_build(session.load_build(path), path)
+    panel.apply_item("weapon", 1001)
+    new_path = session.builds_dir / "z_new.json"
+    panel.save_to(new_path)
+    panel._reload_file_combo()
+    panel._sync_file_combo_selection()
+    assert panel.path.name == "z_new.json"
+    assert "weapon" in panel.build.slots
+    assert panel.file_combo.currentText() == "z_new.json"
+
+
+def test_confirm_discard_or_save_aborts_when_save_as_cancelled(qapp, session, monkeypatch):
+    """fix round1 Critical2回歸: 選「儲存」但path未定, 另存的QFileDialog又被
+    使用者取消時, _save_current()/_save_as()必須回傳False, _confirm_discard_
+    or_save()才能正確中止切換而不是誤放行去load_from覆蓋掉未存的build。"""
+    from app.gui.build_panel import BuildPanel
+    panel = BuildPanel("A", session)
+    panel.start_new("我的新配裝")
+    panel.apply_item("armor", 2001)
+    monkeypatch.setattr(panel, "_ask_save_path", lambda: None)
+    monkeypatch.setattr(panel, "_ask_discard_or_save", lambda: "save")
+    assert panel._confirm_discard_or_save() is False
+    assert panel.dirty
+    assert panel.build.name == "我的新配裝"
+
+
+def test_refine_label_always_shown_when_equipped_except_costume(qapp, session):
+    """fix round1 Important3回歸(裁決覆蓋brief規則2"refine>0才顯示"): 已裝備的
+    GENERAL/SHADOW格恆顯示精煉值(含+0), 服飾格依然永不顯示。"""
+    from app.core.build import SlotConfig
+    from app.gui.build_panel import BuildPanel
+    panel = BuildPanel("A", session)
+    panel.apply_item("weapon", 1001)
+    w = panel.slot_widgets["weapon"]
+    assert w.refine_label.isVisibleTo(w) is True
+    assert w.refine_label.text() == "+0"
+
+    costume_widget = panel.slot_widgets["costume_top"]
+    costume_widget.set_config(SlotConfig(item_id=2001), session)
+    assert costume_widget.refine_label.isVisibleTo(costume_widget) is False

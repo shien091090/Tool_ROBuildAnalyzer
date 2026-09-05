@@ -123,10 +123,19 @@ class BuildPanel(QFrame):
         widget.hovered.connect(lambda on, sk=slot_key: self._on_slot_hovered(sk, on))
 
     def _reload_file_combo(self) -> None:
+        """fix round1第1點: clear()/第一個addItem()各自會發出
+        currentIndexChanged(0), 若不擋訊號, 掛著的_on_file_combo_changed會把它
+        當成「使用者選了字母序第一個檔案」去load_from — 而此時往往剛save_to()
+        完把dirty清乾淨, guard擋不住, 於是剛存好的build被悄悄換成別的檔案。
+        呼叫端(目前是_save_as)重建完combo後務必接著呼叫
+        _sync_file_combo_selection()把選取項對回真正目前load的檔案。
+        """
+        self.file_combo.blockSignals(True)
         self.file_combo.clear()
         for p in self._session.list_builds():
             self.file_combo.addItem(p.name)
         self.file_combo.addItem(_UNSAVED_ENTRY)
+        self.file_combo.blockSignals(False)
 
     @property
     def build(self) -> Build:
@@ -383,34 +392,60 @@ class BuildPanel(QFrame):
 
     def _confirm_discard_or_save(self) -> bool:
         """dirty時切換檔案前的三選一: 儲存/放棄/取消。回傳True代表可以繼續切換
-        (已存檔或使用者選擇放棄變更), False代表使用者取消、維持原檔不切換。
+        (已存檔或使用者選擇放棄變更), False代表要中止切換(使用者選取消, 或
+        選了儲存但path未定、又在另存的QFileDialog中取消——fix round1第2點:
+        這種情況下save根本沒發生, dirty依然是True, 絕不能讓呼叫端誤以為
+        「儲存」選項已經處理完畢就放行去load_from覆蓋掉未存的build)。
+        """
+        choice = self._ask_discard_or_save()
+        if choice == "cancel":
+            return False
+        if choice == "save":
+            return self._save_current()
+        return True  # discard: 不存檔但允許繼續切換
+
+    def _ask_discard_or_save(self) -> str:
+        """回傳"save"/"discard"/"cancel" — 拆成單獨方法方便測試monkeypatch掉
+        QMessageBox, 不必真的彈出視窗就能驗證_confirm_discard_or_save的邏輯。
         """
         box = QMessageBox(self)
         box.setWindowTitle(_CONFIRM_TITLE)
         box.setText(_CONFIRM_TEXT)
         save_btn = box.addButton(_SAVE_TEXT, QMessageBox.ButtonRole.AcceptRole)
-        box.addButton(_DISCARD_TEXT, QMessageBox.ButtonRole.DestructiveRole)
+        discard_btn = box.addButton(_DISCARD_TEXT, QMessageBox.ButtonRole.DestructiveRole)
         cancel_btn = box.addButton(_CANCEL_TEXT, QMessageBox.ButtonRole.RejectRole)
         box.exec()
         clicked = box.clickedButton()
-        if clicked is cancel_btn:
-            return False
         if clicked is save_btn:
-            self._save_current()
-        return True
+            return "save"
+        if clicked is discard_btn:
+            return "discard"
+        return "cancel"
 
-    def _save_current(self) -> None:
+    def _save_current(self) -> bool:
+        """回傳True代表真的存到檔了(path已存在直接存, 或另存成功); False代表
+        沒有path且另存被使用者取消 — 呼叫端(_confirm_discard_or_save)靠這個
+        回傳值判斷能不能繼續切換檔案。
+        """
         if self._path is not None:
             self.save_to(self._path)
-        else:
-            self._save_as()
+            return True
+        return self._save_as()
 
-    def _save_as(self) -> None:
+    def _ask_save_path(self) -> Path | None:
+        """拆成單獨方法方便測試monkeypatch掉QFileDialog(回傳None模擬使用者
+        取消), 不必真的彈出檔案選取視窗。
+        """
         path_str, _filter = QFileDialog.getSaveFileName(
             self, _SAVE_AS_DIALOG_TITLE, str(self._session.builds_dir), _JSON_FILTER
         )
-        if not path_str:
-            return
-        self.save_to(Path(path_str))
+        return Path(path_str) if path_str else None
+
+    def _save_as(self) -> bool:
+        path = self._ask_save_path()
+        if path is None:
+            return False
+        self.save_to(path)
         self._reload_file_combo()
         self._sync_file_combo_selection()
+        return True
