@@ -170,6 +170,20 @@ class DbReader:
             for r in cursor.fetchall()
         ]
 
+    def iter_catalog_rows(self):
+        """catalog建目錄用的全表輕量掃描(不帶onstart原文, 只帶有無)。"""
+        cursor = self._conn.cursor()
+        cursor.execute(
+            "SELECT item_id, internal_name, display_name, description, slot_count, equip_type,"
+            " onstart_equip_src IS NOT NULL FROM items"
+        )
+        for row in cursor:
+            yield (row[0], row[1], row[2], row[3], row[4], row[5], bool(row[6]))
+
+    def meta(self, key: str) -> str | None:
+        row = self._conn.execute("SELECT value FROM import_meta WHERE key=?", (key,)).fetchone()
+        return row[0] if row else None
+
     def _row_to_item_record(self, row) -> ItemRecord:
         """Convert a database row to ItemRecord.
 

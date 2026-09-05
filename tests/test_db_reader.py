@@ -399,3 +399,19 @@ def test_enchant_rows_unknown_table_returns_empty(tmp_path):
     assert reader.enchant_rows(999) == []
 
     reader.close()
+
+
+def test_iter_catalog_rows_and_meta(tmp_path):
+    db_path = _setup_db(tmp_path)
+    conn = sqlite3.connect(db_path)
+    db.set_meta(conn, "import_date", "2026-09-04")
+    conn.commit()
+    conn.close()
+    reader = DbReader(db_path)
+
+    rows = list(reader.iter_catalog_rows())
+    assert rows and len(rows[0]) == 7 and isinstance(rows[0][6], bool)
+    assert reader.meta("import_date") == "2026-09-04"
+    assert reader.meta("nope") is None
+
+    reader.close()
