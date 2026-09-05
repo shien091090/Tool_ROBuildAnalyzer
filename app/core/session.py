@@ -137,3 +137,25 @@ class AnalyzerSession:
 
     def describe_missing(self, missing):
         return describe_missing(missing, self.maps.skill_map)
+
+    def active_combo_members(self, build: Build, item_id: int) -> set[int]:
+        """item_id所屬、且成員全在build已裝(本體+卡片)的所有combo成員id聯集(GUI hover套裝高亮用)。
+
+        查無該item/該item沒有combi_ids/成員未全裝滿 → set()(不成立, 不高亮)。
+        """
+        equipped = set()
+        for cfg in build.slots.values():
+            equipped.add(cfg.item_id)
+            equipped.update(cfg.cards)
+        rec = self.reader.item(item_id)
+        if rec is None or not rec.combi_ids:
+            return set()
+        members_all: set[int] = set()
+        for combo_id in rec.combi_ids:
+            combo = self.reader.combo(combo_id)
+            if combo is None:
+                continue
+            members, _src = combo
+            if members and set(members).issubset(equipped):
+                members_all.update(members)
+        return members_all

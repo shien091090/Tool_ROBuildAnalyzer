@@ -49,3 +49,11 @@ def test_display_helpers(session):
 def test_cost_runs_on_build_without_targets(session):
     report = session.cost(session.load_build(session.builds_dir / "a.json"))
     assert report.items == []
+
+
+def test_active_combo_members(session):
+    a = session.load_build(session.builds_dir / "a.json")   # armor 2001 + card 3001 → combo 5001成立
+    assert session.active_combo_members(a, 2001) == {2001, 3001}
+    assert session.active_combo_members(a, 3001) == {2001, 3001}
+    b = session.load_build(session.builds_dir / "b.json")
+    assert session.active_combo_members(b, 1001) == set()

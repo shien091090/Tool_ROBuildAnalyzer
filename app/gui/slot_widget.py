@@ -20,7 +20,7 @@ grade_label只有GENERAL_SLOTS的格才顯示(服飾/影子裝備沒有升階概
 為"none"時同樣不顯示(沒升階=不畫這個標籤, 不是畫一個空字)。
 """
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QToolButton, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QToolButton, QWidget
 
 SLOT_LABELS: dict[str, str] = {
     "head_top": "上段頭飾",
@@ -63,6 +63,9 @@ _GRADE_LETTERS = {"D": "D", "C": "C", "B": "B", "A": "A"}
 _SLOT_HEIGHT = 28
 _LABEL_WIDTH = 70
 
+_MENU_CLEAR_TEXT = "清空此格"
+_MENU_COST_TARGETS_TEXT = "成本設定…"
+
 
 def _make_chip(text: str, object_name: str) -> QToolButton:
     btn = QToolButton()
@@ -70,6 +73,17 @@ def _make_chip(text: str, object_name: str) -> QToolButton:
     btn.setObjectName(object_name)
     btn.setAutoRaise(False)
     return btn
+
+
+class _ClickableLabel(QLabel):
+    """一般QLabel沒有點擊訊號 — 包一層在mousePressEvent補emit, 讓name_label/
+    refine_label/grade_label各自能連到SlotWidget對應的*_clicked訊號。"""
+    clicked = Signal()
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
 
 
 def _repolish(widget) -> None:
@@ -110,15 +124,18 @@ class SlotWidget(QFrame):
         self.slot_label.setProperty("muted", True)
         layout.addWidget(self.slot_label)
 
-        self.refine_label = QLabel("")
+        self.refine_label = _ClickableLabel("")
         self.refine_label.setVisible(False)
+        self.refine_label.clicked.connect(self.refine_clicked.emit)
         layout.addWidget(self.refine_label)
 
-        self.grade_label = QLabel("")
+        self.grade_label = _ClickableLabel("")
         self.grade_label.setVisible(False)
+        self.grade_label.clicked.connect(self.grade_clicked.emit)
         layout.addWidget(self.grade_label)
 
-        self.name_label = QLabel(_UNEQUIPPED_TEXT)
+        self.name_label = _ClickableLabel(_UNEQUIPPED_TEXT)
+        self.name_label.clicked.connect(self.item_clicked.emit)
         layout.addWidget(self.name_label, 1)
 
         self._chips_widget = QWidget()
@@ -137,8 +154,11 @@ class SlotWidget(QFrame):
                 w.setParent(None)
                 w.deleteLater()
 
-    def _add_chip(self, text: str, object_name: str) -> None:
-        self._chips_layout.addWidget(_make_chip(text, object_name))
+    def _add_chip(self, text: str, object_name: str, on_click=None) -> None:
+        btn = _make_chip(text, object_name)
+        if on_click is not None:
+            btn.clicked.connect(on_click)
+        self._chips_layout.addWidget(btn)
 
     def set_config(self, cfg, session) -> None:
         self._cfg = cfg
@@ -178,27 +198,29 @@ class SlotWidget(QFrame):
         # SHADOW_SLOTS: 無chips
 
     def _fill_general_chips(self, cfg, session) -> None:
-        for card_id in cfg.cards:
-            self._add_chip(session.item_display(card_id), "chip_card")
+        for i, card_id in enumerate(cfg.cards):
+            self._add_chip(session.item_display(card_id), "chip_card",
+                            lambda _checked=False, i=i: self.card_clicked.emit(i))
         entry = session.catalog.get(cfg.item_id)
         slot_count = entry.slot_count if entry is not None else 0
         if slot_count > len(cfg.cards):
-            self._add_chip(_ADD_CARD_TEXT, "chip_add")
+            self._add_chip(_ADD_CARD_TEXT, "chip_add", self.add_card_clicked.emit)
 
         pools = session.enchant_pools(cfg.item_id)
         filled = 0
-        for option in cfg.enchants:
+        for i, option in enumerate(cfg.enchants):
             if option is not None:
                 filled += 1
-                self._add_chip(session.option_display(option), "chip_enchant")
+                self._add_chip(session.option_display(option), "chip_enchant",
+                                lambda _checked=False, i=i: self.enchant_clicked.emit(i))
         if len(pools) > filled:
-            self._add_chip(_ADD_ENCHANT_TEXT, "chip_add")
+            self._add_chip(_ADD_ENCHANT_TEXT, "chip_add", self.add_enchant_clicked.emit)
 
     def _fill_costume_chips(self, cfg, session) -> None:
         if cfg.cards and cfg.cards[0] is not None:
-            self._add_chip(session.item_display(cfg.cards[0]), "chip_stone")
+            self._add_chip(session.item_display(cfg.cards[0]), "chip_stone", self.stone_clicked.emit)
         else:
-            self._add_chip(_ADD_STONE_TEXT, "chip_add")
+            self._add_chip(_ADD_STONE_TEXT, "chip_add", self.add_stone_clicked.emit)
 
     def set_highlight(self, on: bool) -> None:
         self.setProperty("highlight", on)
@@ -214,3 +236,23 @@ class SlotWidget(QFrame):
     def leaveEvent(self, event) -> None:
         self.hovered.emit(False)
         super().leaveEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        """點在name_label/refine_label/grade_label/chips以外的空白處(精煉編輯規則2
+        「點refine_label或空白處的『精煉』」) — 這幾個子widget各自已在自己的
+        mousePressEvent吃掉事件(不會傳到這裡), 所以真的落到這裡的一定是空白處。
+        """
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.refine_clicked.emit()
+        super().mousePressEvent(event)
+
+    def contextMenuEvent(self, event) -> None:
+        menu = QMenu(self)
+        clear_action = menu.addAction(_MENU_CLEAR_TEXT)
+        cost_action = menu.addAction(_MENU_COST_TARGETS_TEXT)
+        cost_action.setEnabled(False)  # T8接成本設定對話框, T6先放著disabled
+        chosen = menu.exec(event.globalPos())
+        if chosen is clear_action:
+            self.clear_requested.emit()
+        elif chosen is cost_action:
+            self.cost_targets_requested.emit()

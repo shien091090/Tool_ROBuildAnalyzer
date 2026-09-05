@@ -68,3 +68,38 @@ def test_slot_widget_dim_property_updates_on_unequip(qapp, session):
     w.set_config(None, session)
     assert w.name_label.property("dim") is True
     assert w.name_label.text() == _UNEQUIPPED_TEXT
+
+
+def test_picker_rows_and_search(qapp, session):
+    from app.gui.picker_dialog import PickerDialog
+    rows = PickerDialog.equipment_rows(session, "weapon", 4252)
+    assert [r.name for r in rows] == ["測試武器"]
+    assert PickerDialog.equipment_rows(session, "weapon", 4255) == []
+    pool = session.enchant_pools(2001)[0]
+    erows = PickerDialog.enchant_rows(session, pool)
+    assert erows[0].name == "詞條A" and erows[0].rate_text == "75.00%"
+    dlg = PickerDialog(None, session, "t", "n", rows)
+    assert dlg.tree.topLevelItemCount() == 1
+    dlg.search.setText("不存在")
+    assert dlg.tree.topLevelItemCount() == 0
+
+
+def test_panel_edit_flow_marks_dirty_and_saves(qapp, session):
+    from app.gui.build_panel import BuildPanel
+    panel = BuildPanel("A", session)
+    path = session.builds_dir / "a.json"
+    panel.set_build(session.load_build(path), path)
+    fired = []
+    panel.changed.connect(lambda: fired.append(1))
+    panel.apply_item("weapon", 1001)
+    panel.apply_refine("weapon", 12)
+    panel.apply_enchant("armor", 1, "Opt_B")
+    panel.apply_stone("costume_top", 8) if session.catalog.get(8) else None
+    assert panel.dirty and len(fired) >= 3
+    assert panel.build.slots["weapon"].item_id == 1001 and panel.build.slots["weapon"].refine == 12
+    assert panel.build.slots["armor"].enchants == ["Opt_A", "Opt_B"]
+    panel.save_to(path)
+    assert not panel.dirty
+    assert session.load_build(path).slots["weapon"].refine == 12
+    panel.apply_item("weapon", None)
+    assert "weapon" not in panel.build.slots
