@@ -56,13 +56,15 @@ def test_skill_mdamage_add_and_sub():
     assert r_sub.entries[0].value == -20.0
 
 
-def test_skill_mdamage_unresolvable_becomes_unrecognized():
+def test_skill_mdamage_unresolvable_becomes_unresolved():
+    # M4 task-1: total_STR missing (SCALAR_KEYS) now routes to KIND_UNRESOLVED.
     ctx = _ctx()
     r = parser.parse_effect_block("AddSkillMDamage(3,total_STR)", ctx, None, _maps())
     assert len(r.entries) == 1
     e = r.entries[0]
-    assert e.kind == entries.KIND_UNRECOGNIZED
-    assert e.extra["raw_line"] == "AddSkillMDamage(3,total_STR)"
+    assert e.kind == entries.KIND_UNRESOLVED
+    assert e.extra["missing"] == ["total_STR"]
+    assert e.extra["raw_lines"] == ["AddSkillMDamage(3,total_STR)"]
 
 
 # ---------------------------------------------------------------------------

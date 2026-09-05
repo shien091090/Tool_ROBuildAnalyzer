@@ -54,12 +54,14 @@ def test_heal_value_add_and_sub():
     assert r_sub.entries[0].value == -20.0
 
 
-def test_heal_value_unresolvable_becomes_unrecognized():
+def test_heal_value_unresolvable_becomes_unresolved():
+    # M4 task-1: total_STR missing (SCALAR_KEYS) now routes to KIND_UNRESOLVED.
     r = parser.parse_effect_block("AddHealValue(total_STR)", _ctx(), None, _maps())
     assert len(r.entries) == 1
     e = r.entries[0]
-    assert e.kind == entries.KIND_UNRECOGNIZED
-    assert e.extra["raw_line"] == "AddHealValue(total_STR)"
+    assert e.kind == entries.KIND_UNRESOLVED
+    assert e.extra["missing"] == ["total_STR"]
+    assert e.extra["raw_lines"] == ["AddHealValue(total_STR)"]
 
 
 # ---------------------------------------------------------------------------
@@ -111,20 +113,24 @@ def test_drain_sp_pool_sub_direction():
     assert e_amount.value == -10.0
 
 
-def test_drain_rate_unresolvable_becomes_unrecognized():
+def test_drain_rate_unresolvable_becomes_unresolved():
+    # M4 task-1: total_STR missing (SCALAR_KEYS) now routes to KIND_UNRESOLVED.
     r = parser.parse_effect_block("AddHPdrain(total_STR)", _ctx(), None, _maps())
     assert len(r.entries) == 1
-    assert r.entries[0].kind == entries.KIND_UNRECOGNIZED
+    assert r.entries[0].kind == entries.KIND_UNRESOLVED
+    assert r.entries[0].extra["missing"] == ["total_STR"]
 
 
-def test_drain_amount_present_but_unresolvable_becomes_unrecognized():
+def test_drain_amount_present_but_unresolvable_becomes_unresolved():
     # The ambiguity here is this port's own (Task-5 safe_eval-returns-None
     # change), not the original's — see the handler comment for why; this
     # port distinguishes "no 2nd arg" from "2nd arg failed to eval" via
     # len(args) instead of relying on eval_lua_arg's None default.
+    # M4 task-1: total_STR missing (SCALAR_KEYS) now routes to KIND_UNRESOLVED.
     r = parser.parse_effect_block("AddHPdrain(50,total_STR)", _ctx(), None, _maps())
     assert len(r.entries) == 1
-    assert r.entries[0].kind == entries.KIND_UNRECOGNIZED
+    assert r.entries[0].kind == entries.KIND_UNRESOLVED
+    assert r.entries[0].extra["missing"] == ["total_STR"]
 
 
 # ---------------------------------------------------------------------------
@@ -284,10 +290,12 @@ def test_race_tolerace_sub_direction_sign_is_positive():
     assert r.entries[0].value == 10.0  # Sub => POSITIVE
 
 
-def test_race_tolerace_unresolvable_becomes_unrecognized():
+def test_race_tolerace_unresolvable_becomes_unresolved():
+    # M4 task-1: total_STR missing (SCALAR_KEYS) now routes to KIND_UNRESOLVED.
     r = parser.parse_effect_block("AddRaceTolerace(1,total_STR)", _ctx(), None, _maps())
     assert len(r.entries) == 1
-    assert r.entries[0].kind == entries.KIND_UNRECOGNIZED
+    assert r.entries[0].kind == entries.KIND_UNRESOLVED
+    assert r.entries[0].extra["missing"] == ["total_STR"]
 
 
 # ---------------------------------------------------------------------------

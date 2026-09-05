@@ -382,15 +382,32 @@ _RE_MATH_FLOOR_ASSIGN = re.compile(r"(\w+)\s*=\s*math\.floor\((.+)\)")
 _RE_GENERAL_ASSIGN = re.compile(r"(\w+)\s*=\s*(.+)")
 
 
-def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_id, trace: list[str]) -> bool:
+def _try_variable_assignment(
+    line: str,
+    variables: dict,
+    ctx: CalcContext,
+    slot_id,
+    trace: list[str],
+    unresolved_vars: dict[str, tuple[set[str], str]],
+) -> bool:
     """V1-V8. Returns True if the line was consumed (whether or not it produced
     anything useful — matches the original's `continue`-after-match shape).
 
     Note: unlike condition blocks, a variable assignment that can't be
     resolved (safe_eval returns None) only produces a ⚠️ trace line — it does
-    NOT create a KIND_UNRESOLVED entry. Variables aren't effects; whatever
-    later line tries to *use* the missing variable/expression will surface
-    its own unresolved/unrecognized signal through its own path.
+    NOT create a KIND_UNRESOLVED entry of its own. Variables aren't effects;
+    whatever later line tries to *use* the missing variable/expression
+    surfaces its own unresolved/unrecognized signal through its own path.
+    V7/V8 additionally record WHY the value couldn't be computed in
+    ``unresolved_vars`` (missing angle keys + the original right-hand
+    expression) when the failure traces back to missing character data
+    (GetSkillLevel/get(N)/SCALAR_KEYS) — a downstream line referencing this
+    variable name can then be routed to KIND_UNRESOLVED instead of
+    KIND_UNRECOGNIZED. V1-V6 never fail (they always default via `.get(x, 0)`)
+    but a variable name can be REASSIGNED across lines — e.g. V1-V6 or a
+    successful V7/V8 following an earlier failed V7/V8 for the same name —
+    so every successful write here clears any stale ``unresolved_vars`` entry
+    for that name.
     """
     # V1: multi-segment GetRefineLevel(...) + GetRefineLevel(...) + ...
     m = _RE_MULTI_REFINE.match(line)
@@ -399,6 +416,7 @@ def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_
         slots = re.findall(r"GetRefineLevel\((\d+)\)", line)
         value = sum(ctx.refine_inputs.get(int(s), 0) for s in slots)
         variables[var] = value
+        unresolved_vars.pop(var, None)
         trace.append(f"📌 `{var}` = {value}（GetRefineLevel({'+'.join(slots)})）")
         return True
 
@@ -408,6 +426,7 @@ def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_
         var, slot = m.groups()
         value = ctx.refine_inputs.get(int(slot), 0)
         variables[var] = value
+        unresolved_vars.pop(var, None)
         trace.append(f"📌 `{var}` = {value}（GetRefineLevel({slot})）")
         return True
 
@@ -417,6 +436,7 @@ def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_
         var, slot = m.groups()
         value = ctx.grade_value(int(slot))
         variables[var] = value
+        unresolved_vars.pop(var, None)
         trace.append(f"📌 `{var}` = {value}（GetEquipGradeLevel({slot})）")
         return True
 
@@ -426,6 +446,7 @@ def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_
         var, slot = m.groups()
         value = ctx.armor_level_map.get(int(slot), 0)
         variables[var] = value
+        unresolved_vars.pop(var, None)
         trace.append(f"📌 `{var}` = {value}（GetEquipArmorLv({slot})）")
         return True
 
@@ -435,6 +456,7 @@ def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_
         var, slot = m.groups()
         value = ctx.weapon_type_map.get(int(slot), 0)
         variables[var] = value
+        unresolved_vars.pop(var, None)
         trace.append(f"📌 `{var}` = {value}（GetWeaponClass({slot})）")
         return True
 
@@ -444,6 +466,7 @@ def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_
         var, slot = m.groups()
         value = ctx.weapon_level_map.get(int(slot), 0)
         variables[var] = value
+        unresolved_vars.pop(var, None)
         trace.append(f"📌 `{var}` = {value}（GetEquipWeaponLv({slot})）")
         return True
 
@@ -453,9 +476,15 @@ def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_
         var, inner_expr = m.groups()
         value = lua_expr.safe_eval(f"math.floor({inner_expr})", variables, ctx, slot_id)
         if value is None:
-            trace.append(f"⚠️ 無法計算 `{var}` = floor({inner_expr})")
+            missing, via = _line_missing(inner_expr, variables, ctx, slot_id, unresolved_vars)
+            if missing:
+                unresolved_vars[var] = (missing, inner_expr)
+                trace.append(f"⚠️ `{var}` = {inner_expr} 依賴未提供的角色資料: {sorted(missing)}")
+            else:
+                trace.append(f"⚠️ 無法計算 `{var}` = floor({inner_expr})")
         else:
             variables[var] = value
+            unresolved_vars.pop(var, None)
             trace.append(f"📌 `{var}` = {value}（floor({inner_expr})）")
         return True
 
@@ -468,9 +497,15 @@ def _try_variable_assignment(line: str, variables: dict, ctx: CalcContext, slot_
             return True
         value = lua_expr.safe_eval(expr, variables, ctx, slot_id)
         if value is None:
-            trace.append(f"⚠️ 無法計算 `{var}` = {expr}")
+            missing, via = _line_missing(expr, variables, ctx, slot_id, unresolved_vars)
+            if missing:
+                unresolved_vars[var] = (missing, expr)
+                trace.append(f"⚠️ `{var}` = {expr} 依賴未提供的角色資料: {sorted(missing)}")
+            else:
+                trace.append(f"⚠️ 無法計算 `{var}` = {expr}")
         else:
             variables[var] = value
+            unresolved_vars.pop(var, None)
             trace.append(f"📌 `{var}` = {value}")
         return True
 
@@ -494,6 +529,30 @@ def _unrecognized(line: str) -> EffectEntry:
     return EffectEntry(
         key="無法辨識", value=None, unit="", kind=KIND_UNRECOGNIZED, category=CAT_OTHER,
         extra={"raw_line": line},
+    )
+
+
+_RE_IDENT = re.compile(r"[A-Za-z_]\w*")
+
+
+def _line_missing(text, variables, ctx, slot_id, unresolved_vars):
+    """text(整行或右式)缺的角色資料 = 直接出現的GetSkillLevel/get/SCALAR key
+    ∪ 引用到的未解變數所缺的key。via列出經由哪些變數帶進來(給condition文字)。"""
+    missing = lua_expr.collect_missing(text, variables, ctx, slot_id)
+    via: list[str] = []
+    for ident in sorted(set(_RE_IDENT.findall(text))):
+        if ident in unresolved_vars:
+            var_missing, rhs = unresolved_vars[ident]
+            missing |= var_missing
+            via.append(f"{ident} = {rhs}")
+    return missing, via
+
+
+def _unresolved_line_entry(line: str, missing: set[str], via: list[str]) -> EffectEntry:
+    condition = ("依賴變數 " + "; ".join(via)) if via else ("依賴角色資料 " + ", ".join(sorted(missing)))
+    return EffectEntry(
+        key="未判定條件", value=None, unit="", kind=KIND_UNRESOLVED, category=CAT_OTHER,
+        extra={"condition": condition, "missing": sorted(missing), "raw_lines": [line]},
     )
 
 
@@ -1835,6 +1894,7 @@ def parse_effect_block(
     entries_out: list[EffectEntry] = []
     trace: list[str] = []
     variables: dict = {}
+    unresolved_vars: dict[str, tuple[set[str], str]] = {}
     block_stack: list[dict] = []
     skill_delay_accum: dict[str, int] = {}
     sfct_state: dict[str, bool] = {"handled": False}
@@ -1945,11 +2005,16 @@ def parse_effect_block(
         active = _all_active(block_stack)
 
         if active:
-            if _try_variable_assignment(line, variables, ctx, slot_id, trace):
+            if _try_variable_assignment(line, variables, ctx, slot_id, trace, unresolved_vars):
                 continue
+            before = len(entries_out)
             if _match_effect_handlers(
                 line, variables, ctx, slot_id, maps, entries_out, skill_delay_accum, sfct_state
             ):
+                if len(entries_out) == before + 1 and entries_out[-1].kind == KIND_UNRECOGNIZED:
+                    missing, via = _line_missing(line, variables, ctx, slot_id, unresolved_vars)
+                    if missing:
+                        entries_out[-1] = _unresolved_line_entry(line, missing, via)
                 continue
 
         # ---- fallback (ro_core.py:2356-2367) ----
@@ -1992,10 +2057,14 @@ def parse_effect_block(
                 trace.append(f"📌 暫存值[{temp_n}] = {temp_val}")
             continue
 
-        entries_out.append(
-            EffectEntry(key="無法辨識", value=None, unit="", kind=KIND_UNRECOGNIZED, category=CAT_OTHER,
-                        extra={"raw_line": original_line})
-        )
+        missing, via = _line_missing(original_line, variables, ctx, slot_id, unresolved_vars)
+        if missing:
+            entries_out.append(_unresolved_line_entry(original_line, missing, via))
+        else:
+            entries_out.append(
+                EffectEntry(key="無法辨識", value=None, unit="", kind=KIND_UNRECOGNIZED, category=CAT_OTHER,
+                            extra={"raw_line": original_line})
+            )
 
     # ---- EOF unresolved-block flush. If block_text ends without enough
     # `end` lines to close every open if/elseif/else (malformed/truncated

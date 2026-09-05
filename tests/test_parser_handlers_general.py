@@ -180,14 +180,18 @@ def test_ext_param_category_routing_via_extparam_category_dict():
     assert r_unknown.entries[0].category == entries.CAT_OTHER
 
 
-def test_ext_param_unresolvable_value_becomes_unrecognized():
+def test_ext_param_unresolvable_value_becomes_unresolved():
+    # M4 task-1: total_STR is a SCALAR_KEYS name missing from ctx.scalars —
+    # this now routes to KIND_UNRESOLVED (missing character data), not
+    # KIND_UNRECOGNIZED, same mechanism as GetSkillLevel/get(N).
     ctx = _ctx()  # no scalars -> total_STR unresolvable
     r = parser.parse_effect_block("AddExtParam(1,41,total_STR)", ctx, None, _maps())
     assert len(r.entries) == 1
     e = r.entries[0]
-    assert e.kind == entries.KIND_UNRECOGNIZED
-    assert e.key == "無法辨識"
-    assert e.extra["raw_line"] == "AddExtParam(1,41,total_STR)"
+    assert e.kind == entries.KIND_UNRESOLVED
+    assert e.key == "未判定條件"
+    assert e.extra["missing"] == ["total_STR"]
+    assert e.extra["raw_lines"] == ["AddExtParam(1,41,total_STR)"]
 
 
 # ---------------------------------------------------------------------------
@@ -223,14 +227,16 @@ def test_spell_cast_time_add_and_sub():
     assert r_sub.entries[0].value == -20.0
 
 
-def test_spell_cast_time_unresolvable_becomes_unrecognized():
+def test_spell_cast_time_unresolvable_becomes_unresolved():
+    # M4 task-1: total_STR missing (SCALAR_KEYS) now routes to KIND_UNRESOLVED.
     ctx = _ctx()  # no scalars -> total_STR unresolvable
     r = parser.parse_effect_block("AddSpellCastTime(total_STR)", ctx, None, _maps())
     assert len(r.entries) == 1
     e = r.entries[0]
-    assert e.kind == entries.KIND_UNRECOGNIZED
-    assert e.key == "無法辨識"
-    assert e.extra["raw_line"] == "AddSpellCastTime(total_STR)"
+    assert e.kind == entries.KIND_UNRESOLVED
+    assert e.key == "未判定條件"
+    assert e.extra["missing"] == ["total_STR"]
+    assert e.extra["raw_lines"] == ["AddSpellCastTime(total_STR)"]
 
 
 # ---------------------------------------------------------------------------
@@ -349,11 +355,13 @@ def test_skill_delay_two_lines_merge_positive_and_negative():
     assert delay_entries[0].unit == "秒"
 
 
-def test_skill_delay_unresolvable_becomes_unrecognized():
+def test_skill_delay_unresolvable_becomes_unresolved():
+    # M4 task-1: total_STR missing (SCALAR_KEYS) now routes to KIND_UNRESOLVED.
     ctx = _ctx()
     r = parser.parse_effect_block("AddSkillDelay(63,total_STR)", ctx, None, _maps({63: "波動拳"}))
     assert len(r.entries) == 1
-    assert r.entries[0].kind == entries.KIND_UNRECOGNIZED
+    assert r.entries[0].kind == entries.KIND_UNRESOLVED
+    assert r.entries[0].extra["missing"] == ["total_STR"]
 
 
 # ---------------------------------------------------------------------------
@@ -386,11 +394,13 @@ def test_exp_percent_kill_race():
     assert e.extra == {"target_kind": "race", "target_id": 1}
 
 
-def test_exp_percent_kill_race_unresolvable_becomes_unrecognized():
+def test_exp_percent_kill_race_unresolvable_becomes_unresolved():
+    # M4 task-1: total_STR missing (SCALAR_KEYS) now routes to KIND_UNRESOLVED.
     ctx = _ctx()
     r = parser.parse_effect_block("SubEXPPercent_KillRace(1,total_STR)", ctx, None, _maps())
     assert len(r.entries) == 1
-    assert r.entries[0].kind == entries.KIND_UNRECOGNIZED
+    assert r.entries[0].kind == entries.KIND_UNRESOLVED
+    assert r.entries[0].extra["missing"] == ["total_STR"]
 
 
 # ---------------------------------------------------------------------------
@@ -415,11 +425,13 @@ def test_receive_item_equip_sub():
     assert r.entries[0].value == -5.0
 
 
-def test_receive_item_equip_unresolvable_becomes_unrecognized():
+def test_receive_item_equip_unresolvable_becomes_unresolved():
+    # M4 task-1: total_STR missing (SCALAR_KEYS) now routes to KIND_UNRESOLVED.
     ctx = _ctx()  # no scalars -> total_STR unresolvable
     r = parser.parse_effect_block("AddReceiveItem_Equip(total_STR)", ctx, None, _maps())
     assert len(r.entries) == 1
     e = r.entries[0]
-    assert e.kind == entries.KIND_UNRECOGNIZED
-    assert e.key == "無法辨識"
-    assert e.extra["raw_line"] == "AddReceiveItem_Equip(total_STR)"
+    assert e.kind == entries.KIND_UNRESOLVED
+    assert e.key == "未判定條件"
+    assert e.extra["missing"] == ["total_STR"]
+    assert e.extra["raw_lines"] == ["AddReceiveItem_Equip(total_STR)"]

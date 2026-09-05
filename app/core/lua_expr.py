@@ -193,6 +193,13 @@ def normalize(
     return expr, missing
 
 
+def collect_missing(expr: str, variables: dict, ctx: CalcContext, current_slot: int | None) -> set[str]:
+    """只回報expr裡解不開的角色資料key(skill:N / get:N / SCALAR_KEYS), 不eval。
+    給parser判斷「這行算不出來是因為缺角色資料, 還是真的看不懂」用。"""
+    _normalized, missing = normalize(expr, variables, ctx, current_slot)
+    return set(missing)
+
+
 def _eval_python_expr(expr: str, local_vars: dict | None = None):
     """Restricted eval of a normalized expression (ported from ro_core.py:678-724)."""
     if not _RE_ALLOWED_EVAL.fullmatch(expr):
