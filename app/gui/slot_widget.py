@@ -85,7 +85,7 @@ class _ClickableLabel(QLabel):
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
-        super().mousePressEvent(event)
+        event.accept()  # 吞掉, 不讓事件穿透到SlotWidget(曾因此選完裝備又跳精煉視窗)
 
 
 def _repolish(widget) -> None:
@@ -235,19 +235,11 @@ class SlotWidget(QFrame):
         self.hovered.emit(False)
         super().leaveEvent(event)
 
-    def mousePressEvent(self, event) -> None:
-        """點在name_label/refine_label/grade_label/chips以外的空白處(精煉編輯規則2
-        「點refine_label或空白處的『精煉』」) — 這幾個子widget各自已在自己的
-        mousePressEvent吃掉事件(不會傳到這裡), 所以真的落到這裡的一定是空白處。
-        """
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.refine_clicked.emit()
-        super().mousePressEvent(event)
-
     def contextMenuEvent(self, event) -> None:
-        """fix round1第3點: 「設定精煉…」/「設定階級…」補在「清空此格」前面,
-        給已裝備格一個一定找得到的精煉/階級編輯入口(不用再賭blank-space
-        click的窄邊margin) — 只在該格「已裝備且該slot類型支援」時才加進選單。
+        """「設定精煉…」/「設定階級…」放在「清空此格」前面, 與點擊精煉/階級數字
+        並列為僅有的兩個編輯入口(2026-09-08驗收裁決: 空白處點擊改精煉已拔掉,
+        它會在選完裝備關閉清單後連跳精煉視窗) — 只在該格「已裝備且該slot類型
+        支援」時才加進選單。
         """
         menu = QMenu(self)
         equipped = self._cfg is not None

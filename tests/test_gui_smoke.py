@@ -376,3 +376,25 @@ def test_main_window_bad_initial_build_falls_back_and_shows_error(qapp, session)
     win = MainWindow(session)
     assert win.panel_a.build.name == "未命名"
     assert "0bad.json" in win.effects_tab.error_label.text()
+
+
+def test_clicking_name_or_blank_area_never_opens_refine(qapp, session):
+    """2026-09-08驗收裁決: 選擇裝備清單關閉後不得連跳精煉視窗。點裝備名只發
+    item_clicked且事件不穿透到SlotWidget; 點格內空白處什麼都不發, 精煉只剩
+    點精煉數字或右鍵選單兩個入口。"""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from app.core.build import SlotConfig
+    from app.gui.slot_widget import SlotWidget
+    w = SlotWidget("armor")
+    w.set_config(SlotConfig(item_id=2001, refine=7), session)
+    w.show()
+    fired = []
+    w.item_clicked.connect(lambda: fired.append("item"))
+    w.refine_clicked.connect(lambda: fired.append("refine"))
+    QTest.mouseClick(w.name_label, Qt.MouseButton.LeftButton)
+    assert fired == ["item"]
+    QTest.mouseClick(w, Qt.MouseButton.LeftButton, pos=QPoint(w.width() - 2, w.height() // 2))
+    assert fired == ["item"]
+    QTest.mouseClick(w.refine_label, Qt.MouseButton.LeftButton)
+    assert fired == ["item", "refine"]
