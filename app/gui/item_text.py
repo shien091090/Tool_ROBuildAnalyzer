@@ -1,7 +1,8 @@
 """道具敘述→HTML轉換(純python, 不import Qt) — picker對話框tooltip共用。
 
-RO道具敘述習慣用^RRGGBB切換文字顏色、^000000代表切回預設色(深色主題視為
-關閉span, 不畫成黑字, 否則在暗色底上會看不見) — 這裡只做這一種標記語言到
+RO道具敘述習慣用^RRGGBB切換文字顏色、^000000代表切回預設色(視為關閉span
+回到QToolTip的預設字色, 不硬畫成黑字; tooltip底色見theme.TOOLTIP_BG, 與遊戲內
+淺色道具視窗一致, 色碼才會照原意呈現) — 這裡只做這一種標記語言到
 HTML的最小轉換, 換行轉<br>, 其餘文字一律html.escape避免敘述裡剛好出現
 <...>被瀏覽器/QLabel richtext當成標籤解讀。
 """

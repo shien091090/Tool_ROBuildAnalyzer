@@ -3,7 +3,7 @@
 色票(給其他gui模組直接import使用, 避免各檔各自複製hex碼):
     bg #14161c / panel #1c1f27 / raised #242833 / line #333845 / text #e2e6ef /
     muted #8b93a5 / dim #5c6373 / gold #d9a84e / combo #4ec9b0 / good #6fbf73 /
-    bad #d97c7c / warn #d9b84e。
+    bad #d97c7c / warn #d9b84e; tooltip獨立淺底 tooltip_bg #f4f1e8 / tooltip_text #1c1f27。
 
 chip樣式一律以QToolButton的objectName區分(見slot_widget.py建立時setObjectName):
     chip_card(卡片) / chip_enchant(附魔) / chip_stone(強化石, 服飾格用) /
@@ -27,6 +27,11 @@ COMBO = "#4ec9b0"
 GOOD = "#6fbf73"
 BAD = "#d97c7c"
 WARN = "#d9b84e"
+# tooltip獨立用淺底深字: RO敘述的^RRGGBB色碼是針對遊戲內淺色道具視窗設計的, 走深底會讓
+# ^0000FF等深色碼看不見; 不定義QToolTip時Qt會用系統淺底卻套到上面`*`的淺字, 兩者相近讀不到
+TOOLTIP_BG = "#f4f1e8"
+TOOLTIP_TEXT = "#1c1f27"
+TOOLTIP_LINE = "#b8b2a3"
 
 QSS = f"""
 * {{
@@ -85,6 +90,12 @@ QPushButton {{
 }}
 QPushButton:hover {{
     border-color: {COMBO};
+}}
+QToolTip {{
+    background: {TOOLTIP_BG};
+    color: {TOOLTIP_TEXT};
+    border: 1px solid {TOOLTIP_LINE};
+    padding: 4px 6px;
 }}
 QToolButton {{
     border-radius: 3px;
