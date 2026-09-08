@@ -18,6 +18,7 @@ ITEMS = [
     _item(3001, "Test_Card", "測試卡片", "系列 : ^777777卡片^000000\n裝備 : ^777777鎧甲^000000", "card", 0, "AddExtParam(0, 41, 5)", [5001]),
     _item(310001, "Opt_A", "詞條A", "A", "card", 0, "AddExtParam(0, 41, 1)"),
     _item(310002, "Opt_B", "詞條B", "B", "card", 0, "AddExtParam(0, 41, 2)"),
+    _item(29001, "Test_Stone", "測試石(頭上)", "說明", "card", 0, "AddExtParam(0, 41, 3)"),
     _item(1001, "Test_Weapon", "測試武器", "系列 : ^777777雙手劍^000000\n裝備 : ^777777盧恩騎士系列^000000", "Mweapon", 2, "AddExtParam(0, 41, 20)"),
 ]
 COMBOS = {5001: {"member_item_ids": [2001, 3001], "onstart_src": "AddExtParam(0, 41, 100)"}}

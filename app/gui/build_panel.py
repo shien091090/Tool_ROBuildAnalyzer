@@ -117,10 +117,8 @@ class BuildPanel(QFrame):
         widget.grade_clicked.connect(lambda sk=slot_key: self._on_grade_clicked(sk))
         widget.card_clicked.connect(lambda i, sk=slot_key: self._on_card_clicked(sk, i))
         widget.enchant_clicked.connect(lambda i, sk=slot_key: self._on_enchant_clicked(sk, i))
-        widget.stone_clicked.connect(lambda sk=slot_key: self._on_stone_clicked(sk))
         widget.add_card_clicked.connect(lambda sk=slot_key: self._on_add_card_clicked(sk))
         widget.add_enchant_clicked.connect(lambda sk=slot_key: self._on_add_enchant_clicked(sk))
-        widget.add_stone_clicked.connect(lambda sk=slot_key: self._on_stone_clicked(sk))
         widget.clear_requested.connect(lambda sk=slot_key: self.apply_item(sk, None))
         widget.cost_targets_requested.connect(lambda sk=slot_key: self._on_cost_targets_requested(sk))
         widget.hovered.connect(lambda on, sk=slot_key: self._on_slot_hovered(sk, on))
@@ -245,13 +243,6 @@ class BuildPanel(QFrame):
             cfg.enchants[index] = option
         self._mark_changed()
 
-    def apply_stone(self, slot_key: str, stone_id: int | None) -> None:
-        cfg = self._build.slots.get(slot_key)
-        if cfg is None:
-            return
-        cfg.cards = [] if stone_id is None else [stone_id]
-        self._mark_changed()
-
     def apply_cost_targets(self, slot_key: str, ct: CostTargets | None) -> None:
         cfg = self._build.slots.get(slot_key)
         if cfg is None:
@@ -299,7 +290,11 @@ class BuildPanel(QFrame):
     # -- dialog-driven handler(thin, 呼叫端): 開對話框→轉呼叫上面的純方法 --
 
     def _on_item_clicked(self, slot_key: str) -> None:
-        result = PickerDialog.pick_equipment(self, self._session, slot_key, self.job_id)
+        # 服飾格的item_id就是強化石(服飾本體無效果不給選), 開的是強化石清單
+        if slot_key in COSTUME_SLOTS:
+            result = PickerDialog.pick_stone(self, self._session, slot_key)
+        else:
+            result = PickerDialog.pick_equipment(self, self._session, slot_key, self.job_id)
         if result is CLEAR:
             self.apply_item(slot_key, None)
         elif result is not None:
@@ -366,13 +361,6 @@ class BuildPanel(QFrame):
         result = PickerDialog.pick_enchant(self, self._session, cfg.item_id, pools[index])
         if result is not None and result is not CLEAR:
             self.apply_enchant(slot_key, index, result)
-
-    def _on_stone_clicked(self, slot_key: str) -> None:
-        result = PickerDialog.pick_stone(self, self._session, slot_key)
-        if result is CLEAR:
-            self.apply_stone(slot_key, None)
-        elif result is not None:
-            self.apply_stone(slot_key, result)
 
     def _on_cost_targets_requested(self, slot_key: str) -> None:
         cfg = self._build.slots.get(slot_key)

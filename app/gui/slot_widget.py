@@ -11,9 +11,9 @@ chips規則(T5只畫, T6接點擊事件):
         補一顆「+ 卡片」(chip_add); 附魔chip(chip_enchant) x 已選(非None)的
         enchants項, 若附魔池槽位數(session.enchant_pools)大於已選數,
         補一顆「+ 附魔」(chip_add)。
-    服飾(COSTUME_SLOTS): cards[0]存在 → 一顆強化石chip(chip_stone), 否則
-        補一顆「+ 強化石」(chip_add)。服飾格沒有精煉/附魔的概念, refine_label
-        永不顯示。
+    服飾(COSTUME_SLOTS): 服飾本體沒有任何效果, 不顯示、不可選; item_id直接存
+        服飾強化石(與CLI配裝檔一致), 點格子開的是強化石清單, 沒有任何chip。
+        服飾格沒有精煉/附魔的概念, refine_label永不顯示。
     影子裝備(SHADOW_SLOTS): 沒有任何chip(spec: 只有基本裝備, 無卡片/附魔欄位)。
 
 grade_label只有GENERAL_SLOTS的格才顯示(服飾/影子裝備沒有升階概念); grade
@@ -58,7 +58,6 @@ _UNEQUIPPED_TEXT = "— 未裝備(點擊選擇)"
 _COST_TARGETS_MARKER = " $"
 _ADD_CARD_TEXT = "+ 卡片"
 _ADD_ENCHANT_TEXT = "+ 附魔"
-_ADD_STONE_TEXT = "+ 強化石"
 _GRADE_LETTERS = {"D": "D", "C": "C", "B": "B", "A": "A"}
 
 _SLOT_HEIGHT = 28
@@ -104,10 +103,8 @@ class SlotWidget(QFrame):
     grade_clicked = Signal()
     card_clicked = Signal(int)
     enchant_clicked = Signal(int)
-    stone_clicked = Signal()
     add_card_clicked = Signal()
     add_enchant_clicked = Signal()
-    add_stone_clicked = Signal()
     clear_requested = Signal()
     cost_targets_requested = Signal()
     hovered = Signal(bool)
@@ -202,9 +199,7 @@ class SlotWidget(QFrame):
 
         if is_general:
             self._fill_general_chips(cfg, session)
-        elif is_costume:
-            self._fill_costume_chips(cfg, session)
-        # SHADOW_SLOTS: 無chips
+        # COSTUME_SLOTS(item_id即強化石)/SHADOW_SLOTS: 無chips
 
     def _fill_general_chips(self, cfg, session) -> None:
         for i, card_id in enumerate(cfg.cards):
@@ -223,12 +218,6 @@ class SlotWidget(QFrame):
                                 lambda _checked=False, i=i: self.enchant_clicked.emit(i))
         if len(pools) > filled:
             self._add_chip(_ADD_ENCHANT_TEXT, "chip_add", self.add_enchant_clicked.emit)
-
-    def _fill_costume_chips(self, cfg, session) -> None:
-        if cfg.cards and cfg.cards[0] is not None:
-            self._add_chip(session.item_display(cfg.cards[0]), "chip_stone", self.stone_clicked.emit)
-        else:
-            self._add_chip(_ADD_STONE_TEXT, "chip_add", self.add_stone_clicked.emit)
 
     def set_highlight(self, on: bool) -> None:
         self.setProperty("highlight", on)

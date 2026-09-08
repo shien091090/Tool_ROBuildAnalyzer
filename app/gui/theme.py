@@ -6,7 +6,7 @@
     bad #d97c7c / warn #d9b84e; tooltip獨立淺底 tooltip_bg #f4f1e8 / tooltip_text #1c1f27。
 
 chip樣式一律以QToolButton的objectName區分(見slot_widget.py建立時setObjectName):
-    chip_card(卡片) / chip_enchant(附魔) / chip_stone(強化石, 服飾格用) /
+    chip_card(卡片) / chip_enchant(附魔) /
     chip_add(「+ 卡片」/「+ 附魔」/「+ 強化石」等待新增按鈕, 虛線框)。
 
 高亮邊框(套裝提示用, T6接): SlotWidget呼叫setProperty("highlight", True/False)後
@@ -110,11 +110,6 @@ QToolButton#chip_enchant {{
     background: #241f30;
     border: 1px solid #453860;
     color: #c8b4e8;
-}}
-QToolButton#chip_stone {{
-    background: #2b2418;
-    border: 1px solid #4d3f22;
-    color: #dcc084;
 }}
 QToolButton#chip_add {{
     background: transparent;

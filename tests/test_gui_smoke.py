@@ -101,7 +101,7 @@ def test_panel_edit_flow_marks_dirty_and_saves(qapp, session):
     panel.apply_item("weapon", 1001)
     panel.apply_refine("weapon", 12)
     panel.apply_enchant("armor", 1, "Opt_B")
-    panel.apply_stone("costume_top", 8) if session.catalog.get(8) else None
+    panel.apply_item("costume_top", 29001)
     assert panel.dirty and len(fired) >= 3
     assert panel.build.slots["weapon"].item_id == 1001 and panel.build.slots["weapon"].refine == 12
     assert panel.build.slots["armor"].enchants == ["Opt_A", "Opt_B"]
@@ -169,6 +169,27 @@ def test_refine_label_always_shown_when_equipped_except_costume(qapp, session):
     costume_widget = panel.slot_widgets["costume_top"]
     costume_widget.set_config(SlotConfig(item_id=2001), session)
     assert costume_widget.refine_label.isVisibleTo(costume_widget) is False
+
+
+def test_costume_slot_holds_stone_directly(qapp, session, monkeypatch):
+    """服飾本體無任何效果不顯示: 服飾格item_id直接存強化石(同CLI配裝檔),
+    格內顯示石頭名、沒有任何chip, 點格子開的是強化石清單不是服飾清單。"""
+    from app.gui import picker_dialog
+    from app.gui.build_panel import BuildPanel
+    panel = BuildPanel("A", session)
+    panel.apply_item("costume_top", 29001)
+    w = panel.slot_widgets["costume_top"]
+    assert "測試石(頭上)" in w.name_label.text()
+    assert w.chip_buttons() == []
+    assert panel.build.slots["costume_top"].cards == []
+
+    calls = []
+    monkeypatch.setattr(picker_dialog.PickerDialog, "pick_stone", staticmethod(lambda *a: calls.append(("stone", a[2])) or 29001))
+    monkeypatch.setattr(picker_dialog.PickerDialog, "pick_equipment", staticmethod(lambda *a: calls.append(("equip", a[2])) or None))
+    panel._on_item_clicked("costume_garment")
+    panel._on_item_clicked("head_top")
+    assert calls == [("stone", "costume_garment"), ("equip", "head_top")]
+    assert panel.build.slots["costume_garment"].item_id == 29001
 
 
 def test_effects_tab_renders_rows_and_uncounted(qapp, session):
