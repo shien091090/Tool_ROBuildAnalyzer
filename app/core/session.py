@@ -142,6 +142,10 @@ class AnalyzerSession:
             return f"item:{item_id}"
         return f"{e.display_name}[{e.slot_count}]" if e.slot_count > 0 else e.display_name
 
+    def item_description(self, item_id) -> str:
+        e = self.catalog.get(item_id)
+        return e.description if e else ""
+
     def option_display(self, internal_name):
         rec = self.reader.item_by_internal_name(internal_name)
         return rec.display_name if rec and rec.display_name else internal_name

@@ -46,6 +46,7 @@ def test_display_helpers(session):
     assert session.equipment_display(29001) == "測試石(頭上)"
     assert session.equipment_display(42) == "item:42"
     assert session.option_display("Opt_B") == "詞條B"
+    assert "鎧甲" in session.item_description(2001) and session.item_description(42) == ""
     assert session.option_display("Nope") == "Nope"
     assert session.describe_missing(["skill:5015"]) == ["技能「測試技能」等級"]
     assert ("armor_lv1", "一級防具") in session.refine_table_choices()

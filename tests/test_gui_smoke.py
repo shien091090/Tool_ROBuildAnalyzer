@@ -38,7 +38,9 @@ def test_panel_set_build_renders_names(qapp, session):
     panel.set_build(session.load_build(path), path)
     w = panel.slot_widgets["armor"]
     assert w.name_label.text() == "測試鎧甲[1]"   # 一般格裝備名帶洞數後綴
+    assert "鎧甲" in w.name_label.toolTip()        # 懸停裝備名顯示敘述tooltip(同選擇清單)
     assert "+7" in w.refine_label.text()
+    assert panel.slot_widgets["weapon"].name_label.toolTip() == ""   # 未裝備無tooltip
     chip_texts = [c.text() for c in w.chip_buttons()]
     assert "測試卡片" in chip_texts and "詞條A" in chip_texts
     assert "+ 附魔" in chip_texts        # 表有2槽, 只填1個

@@ -23,6 +23,8 @@ grade_label只有GENERAL_SLOTS的格才顯示(服飾/影子裝備沒有升階概
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QToolButton, QVBoxLayout, QWidget
 
+from app.gui.item_text import description_to_html
+
 SLOT_LABELS: dict[str, str] = {
     "head_top": "上段頭飾",
     "head_mid": "中段頭飾",
@@ -231,6 +233,7 @@ class SlotWidget(QFrame):
 
         if cfg is None:
             self.name_label.setText(_UNEQUIPPED_TEXT)
+            self.name_label.setToolTip("")
             self.name_label.setProperty("dim", True)
             _repolish(self.name_label)
             self.refine_label.setVisible(False)
@@ -245,6 +248,8 @@ class SlotWidget(QFrame):
         # 一般格裝備名帶「[N]」洞數後綴; 服飾(石頭)/影子裝備不可插卡, 不帶
         display = session.equipment_display(cfg.item_id) if is_general else session.item_display(cfg.item_id)
         self.name_label.setText(display)
+        # 懸停裝備名顯示與選擇清單相同的敘述tooltip(2026-09-08驗收需求)
+        self.name_label.setToolTip(description_to_html(session.item_description(cfg.item_id)))
 
         if not is_costume:
             # controller ruling(fix round1第3點, 覆蓋brief規則2原本的"refine>0才
