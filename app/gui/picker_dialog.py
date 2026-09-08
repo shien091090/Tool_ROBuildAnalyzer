@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -40,6 +41,8 @@ _SEARCH_PLACEHOLDER = "搜尋名稱…"
 _COUNT_FORMAT = "{} 筆"
 _CLEAR_TEXT = "清除"
 _CLOSE_TEXT = "關閉(Esc)"
+_DIALOG_WIDTH = 520   # 名稱欄要容得下「(服飾)XXXX」等長名, 預設sizeHint太窄會被截成「RO十週…」
+_DIALOG_HEIGHT = 640
 
 
 @dataclass(frozen=True)
@@ -58,6 +61,7 @@ class PickerDialog(QDialog):
         self._job_filter = job_filter
         self._all_rows: list[PickRow] = list(rows)
         self.result = None
+        self.resize(_DIALOG_WIDTH, _DIALOG_HEIGHT)
 
         layout = QVBoxLayout(self)
         if note:
@@ -79,6 +83,11 @@ class PickerDialog(QDialog):
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setColumnCount(2)
+        self.tree.setRootIsDecorated(False)
+        header = self.tree.header()
+        header.setStretchLastSection(False)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.tree, 1)
 
         bottom_row = QHBoxLayout()

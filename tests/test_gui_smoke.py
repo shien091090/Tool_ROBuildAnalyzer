@@ -80,6 +80,12 @@ def test_picker_rows_and_search(qapp, session):
     assert erows[0].name == "詞條A" and erows[0].rate_text == "75.00%"
     dlg = PickerDialog(None, session, "t", "n", rows)
     assert dlg.tree.topLevelItemCount() == 1
+    # 名稱欄要吃滿剩餘寬度、機率欄依內容縮放, 對話框要有可讀的初始尺寸(避免名稱被截成「RO十週…」)
+    from PySide6.QtWidgets import QHeaderView
+    header = dlg.tree.header()
+    assert header.sectionResizeMode(0) == QHeaderView.ResizeMode.Stretch
+    assert header.sectionResizeMode(1) == QHeaderView.ResizeMode.ResizeToContents
+    assert dlg.width() >= 480 and dlg.height() >= 560
     dlg.search.setText("不存在")
     assert dlg.tree.topLevelItemCount() == 0
 
