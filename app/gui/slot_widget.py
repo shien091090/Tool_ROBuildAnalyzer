@@ -1,9 +1,10 @@
 """SlotWidget — 單一部位格的唯讀顯示(T5) + 訊號骨架(T6接互動)。
 
-版面(spec brief §版面對策, 硬性約束): 單列
-[部位標籤 fixed 70px][精煉 +N][階級][裝備名 stretch][chips…靠右不換行],
-固定高度28px, 字級12px。20格 + 3個section標題(各18px)全部疊起來約690px,
-在1920x1080下兩個BuildPanel並排仍可完整顯示、無需捲動(spec §9)。
+版面: 第一列
+[部位標籤 fixed 70px][精煉 +N][階級][裝備名 stretch][chips…靠右],
+高度28px, 字級12px。chips若在第一列會被擠到截字(2026-09-08驗收裁決), 就整組
+搬到第二列靠右排(格高變成28+24), 塞得下就收回第一列 — 判斷在_relayout_chips,
+set_config與resizeEvent都會重算。20格 + 3個section標題(各18px)單列時約690px。
 
 chips規則(T5只畫, T6接點擊事件):
     一般裝備(GENERAL_SLOTS): 卡片chip(chip_card) x len(cards), 若插槽數(由
@@ -20,7 +21,7 @@ grade_label只有GENERAL_SLOTS的格才顯示(服飾/影子裝備沒有升階概
 為"none"時同樣不顯示(沒升階=不畫這個標籤, 不是畫一個空字)。
 """
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QToolButton, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QToolButton, QVBoxLayout, QWidget
 
 SLOT_LABELS: dict[str, str] = {
     "head_top": "上段頭飾",
@@ -61,6 +62,7 @@ _ADD_ENCHANT_TEXT = "+ 附魔"
 _GRADE_LETTERS = {"D": "D", "C": "C", "B": "B", "A": "A"}
 
 _SLOT_HEIGHT = 28
+_CHIP_ROW_HEIGHT = 24
 _LABEL_WIDTH = 70
 
 _MENU_REFINE_TEXT = "設定精煉…"
@@ -113,11 +115,26 @@ class SlotWidget(QFrame):
         super().__init__(parent)
         self.slot_key = slot_key
         self.setObjectName("SlotWidget")
-        self.setFixedHeight(_SLOT_HEIGHT)
 
-        layout = QHBoxLayout(self)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self._row1 = QWidget()
+        self._row1.setFixedHeight(_SLOT_HEIGHT)
+        layout = QHBoxLayout(self._row1)
         layout.setContentsMargins(4, 0, 4, 0)
         layout.setSpacing(6)
+        outer.addWidget(self._row1)
+        self._row1_layout = layout
+
+        self._row2 = QWidget()
+        self._row2.setFixedHeight(_CHIP_ROW_HEIGHT)
+        self._row2_layout = QHBoxLayout(self._row2)
+        self._row2_layout.setContentsMargins(4, 0, 4, 2)
+        self._row2_layout.setSpacing(6)
+        self._row2_layout.addStretch(1)
+        self._row2.setVisible(False)
+        outer.addWidget(self._row2)
 
         self.slot_label = QLabel(SLOT_LABELS[slot_key])
         self.slot_label.setFixedWidth(_LABEL_WIDTH)
@@ -143,8 +160,53 @@ class SlotWidget(QFrame):
         self._chips_layout.setContentsMargins(0, 0, 0, 0)
         self._chips_layout.setSpacing(4)
         layout.addWidget(self._chips_widget, 0, Qt.AlignRight)
+        self._chips_on_second_row = False
 
         self._cfg = None
+
+    @property
+    def chips_on_second_row(self) -> bool:
+        return self._chips_on_second_row
+
+    def _chips_natural_width(self) -> int:
+        n = self._chips_layout.count()
+        if n == 0:
+            return 0
+        widths = sum(self._chips_layout.itemAt(i).widget().sizeHint().width() for i in range(n))
+        return widths + self._chips_layout.spacing() * (n - 1)
+
+    def _row1_available_for_chips(self) -> int:
+        m = self._row1_layout.contentsMargins()
+        used = m.left() + m.right() + self.slot_label.width()
+        parts = 1  # slot_label
+        for w in (self.refine_label, self.grade_label):
+            if w.isVisibleTo(self):
+                used += w.sizeHint().width()
+                parts += 1
+        used += self.name_label.sizeHint().width()
+        parts += 1
+        used += self._row1_layout.spacing() * parts  # 每個元件與chips之間的間距
+        return self.width() - used
+
+    def _relayout_chips(self) -> None:
+        """chips在第一列塞不下(會被擠到截字)就整組搬到第二列, 塞得下就收回。"""
+        need = self._chips_natural_width()
+        overflow = need > 0 and need > self._row1_available_for_chips()
+        if overflow == self._chips_on_second_row:
+            return
+        self._chips_on_second_row = overflow
+        if overflow:
+            self._row1_layout.removeWidget(self._chips_widget)
+            self._row2_layout.addWidget(self._chips_widget, 0, Qt.AlignRight)
+        else:
+            self._row2_layout.removeWidget(self._chips_widget)
+            self._row1_layout.addWidget(self._chips_widget, 0, Qt.AlignRight)
+        self._row2.setVisible(overflow)
+        self.updateGeometry()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._relayout_chips()
 
     def _clear_chips(self) -> None:
         while self._chips_layout.count():
@@ -173,6 +235,7 @@ class SlotWidget(QFrame):
             _repolish(self.name_label)
             self.refine_label.setVisible(False)
             self.grade_label.setVisible(False)
+            self._relayout_chips()
             return
 
         self.name_label.setProperty("dim", False)
@@ -201,6 +264,7 @@ class SlotWidget(QFrame):
         if is_general:
             self._fill_general_chips(cfg, session)
         # COSTUME_SLOTS(item_id即強化石)/SHADOW_SLOTS: 無chips
+        self._relayout_chips()
 
     def _fill_general_chips(self, cfg, session) -> None:
         for i, card_id in enumerate(cfg.cards):

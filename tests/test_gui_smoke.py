@@ -398,3 +398,26 @@ def test_clicking_name_or_blank_area_never_opens_refine(qapp, session):
     assert fired == ["item"]
     QTest.mouseClick(w.refine_label, Qt.MouseButton.LeftButton)
     assert fired == ["item", "refine"]
+
+
+def test_chips_wrap_to_second_row_when_first_row_too_narrow(qapp, session):
+    """2026-09-08驗收裁決: chips在第一列塞不下時不截字, 整組搬到第二列; 拉寬
+    後塞得下就收回第一列, 格高跟著變。"""
+    from app.core.build import SlotConfig
+    from app.gui.slot_widget import SlotWidget, _CHIP_ROW_HEIGHT, _SLOT_HEIGHT
+    w = SlotWidget("armor")
+    w.show()
+    w.resize(330, w.sizeHint().height())
+    w.set_config(SlotConfig(item_id=2001, refine=7, cards=[3001], enchants=["Opt_A"]), session)
+    qapp.processEvents()
+    assert w.chips_on_second_row is True
+    assert w.sizeHint().height() == _SLOT_HEIGHT + _CHIP_ROW_HEIGHT
+    assert all(c.width() >= c.sizeHint().width() for c in w.chip_buttons())
+
+    w.resize(1200, w.sizeHint().height())
+    qapp.processEvents()
+    assert w.chips_on_second_row is False
+    assert w.sizeHint().height() == _SLOT_HEIGHT
+
+    w.set_config(None, session)
+    assert w.chips_on_second_row is False
