@@ -34,6 +34,21 @@ def _expand_positions(raw):
     return frozenset({raw})
 
 
+_COSTUME_NAME_TAG = "(服飾)"
+_COSTUME_SERIES = "服飾裝備"
+_SERIES_AS_POSITION = frozenset({"披肩"})   # 服飾披肩常把系列寫成披肩且不寫位置, 拿系列補位置
+
+
+def apply_costume_name_override(display_name, series, positions):
+    """名稱帶「(服飾)」的道具一律視為服飾系列(client敘述有幾十件把系列誤寫成頭具/披肩,
+    或整段漏寫), 敘述的系列欄只拿來補位置; 名稱沒帶就原樣回傳。"""
+    if _COSTUME_NAME_TAG not in (display_name or ""):
+        return series, positions
+    if not positions and series in _SERIES_AS_POSITION:
+        positions = frozenset({series})
+    return _COSTUME_SERIES, positions
+
+
 def parse_description_fields(description):
     text = strip_color_codes(description)
     if not text:
@@ -98,6 +113,7 @@ class ItemCatalog:
             if not display:
                 continue
             series, positions, equip_text = parse_description_fields(desc)
+            series, positions = apply_costume_name_override(display, series, positions)
             entries.append(CatalogEntry(item_id, internal, display, desc or "", slot_count or 0, equip_type,
                                         has_onstart, series, positions, equip_text))
         return cls(entries)

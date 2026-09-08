@@ -34,6 +34,9 @@ _ROWS = [
     _row(14, "鎧甲", "系列 : ^777777鎧甲^000000\n裝備 : ^777777全職業^000000", slot_count=1),
     _row(15, None, "系列 : ^777777鎧甲^000000"),
     _row(16, "右飾品卡", "系列 : ^777777卡片^000000\n裝備 : ^777777飾品(右)^000000", equip_type="card"),
+    _row(17, "(服飾)系列寫錯帽", "系列 : ^777777頭具^000000\n位置 : ^777777頭上^000000\n裝備 : ^777777全職業^000000"),
+    _row(18, "(服飾)系列寫錯斗篷", "系列 : ^777777披肩^000000\n裝備 : ^777777全職業^000000"),
+    _row(19, "(服飾)漏寫系列帽", "位置 : ^777777頭中^000000\n裝備 : ^777777全職業^000000"),
 ]
 
 
@@ -82,8 +85,18 @@ def test_equipment_for_head_slots(reader):
 def test_equipment_shadow_excludes_box_and_costume(reader):
     cat = catalog.ItemCatalog.from_reader(reader)
     assert _ids(cat.equipment_for_slot("shadow_armor")) == [3]
-    assert _ids(cat.equipment_for_slot("costume_top")) == [5, 13]
+    assert _ids(cat.equipment_for_slot("costume_top")) == [5, 13, 17]
     assert _ids(cat.equipment_for_slot("armor")) == [14]
+
+
+def test_costume_name_tag_overrides_description_series(reader):
+    # 名稱帶(服飾)的道具即使敘述系列寫成頭具/披肩或漏寫, 都只出現在服飾格, 不混進一般格
+    cat = catalog.ItemCatalog.from_reader(reader)
+    assert 17 not in _ids(cat.equipment_for_slot("head_top"))
+    assert 18 not in _ids(cat.equipment_for_slot("garment"))
+    assert _ids(cat.equipment_for_slot("costume_garment")) == [18]
+    assert _ids(cat.equipment_for_slot("costume_mid")) == [19]
+    assert catalog.apply_costume_name_override("普通帽", "頭具", frozenset({"頭上"})) == ("頭具", frozenset({"頭上"}))
 
 
 def test_weapon_job_filter(reader):
@@ -137,3 +150,7 @@ def test_real_db_spot_checks():
     assert 4302 in {e.item_id for e in cat.cards_for_slot("armor")}
     assert 29053 in {e.item_id for e in cat.stones_for_slot("costume_top")}
     assert 24764 in {e.item_id for e in cat.equipment_for_slot("shadow_armor")}
+    assert 31628 not in {e.item_id for e in cat.equipment_for_slot("head_top")}  # (服飾)土人帽子, 敘述系列誤寫頭具
+    assert 31628 in {e.item_id for e in cat.equipment_for_slot("costume_top")}
+    assert 20523 not in {e.item_id for e in cat.equipment_for_slot("garment")}  # (服飾)2018-RTC紀念斗篷, 系列寫披肩無位置
+    assert 20523 in {e.item_id for e in cat.equipment_for_slot("costume_garment")}
