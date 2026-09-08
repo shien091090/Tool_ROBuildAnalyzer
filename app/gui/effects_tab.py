@@ -186,7 +186,10 @@ class EffectsTab(QWidget):
         for row in rows:
             by_cat.setdefault(row.category, []).append(row)
 
-        mono_font = QFont(_TABLE_FONT_FAMILY)
+        # 以表格現有字型為底只換family: 裸建QFont(family)的pointSize是-1, 之後
+        # setBold複製時Qt會警告「Point size <= 0」
+        mono_font = QFont(self.table.font())
+        mono_font.setFamily(_TABLE_FONT_FAMILY)
 
         r = 0
         unknown_cats = [c for c in by_cat if c not in CATEGORY_ORDER]
