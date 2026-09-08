@@ -134,6 +134,14 @@ class AnalyzerSession:
         e = self.catalog.get(item_id)
         return e.display_name if e else f"item:{item_id}"
 
+    def equipment_display(self, item_id):
+        """可插卡裝備名尾端加「[N]」(N=卡片洞數, 無洞不加); 只給一般10格用,
+        服飾/影子裝備絕對不可插卡, 呼叫端不該對那些格用這個。"""
+        e = self.catalog.get(item_id)
+        if e is None:
+            return f"item:{item_id}"
+        return f"{e.display_name}[{e.slot_count}]" if e.slot_count > 0 else e.display_name
+
     def option_display(self, internal_name):
         rec = self.reader.item_by_internal_name(internal_name)
         return rec.display_name if rec and rec.display_name else internal_name

@@ -37,7 +37,7 @@ def test_panel_set_build_renders_names(qapp, session):
     path = session.builds_dir / "a.json"
     panel.set_build(session.load_build(path), path)
     w = panel.slot_widgets["armor"]
-    assert "測試鎧甲" in w.name_label.text()
+    assert w.name_label.text() == "測試鎧甲[1]"   # 一般格裝備名帶洞數後綴
     assert "+7" in w.refine_label.text()
     chip_texts = [c.text() for c in w.chip_buttons()]
     assert "測試卡片" in chip_texts and "詞條A" in chip_texts
@@ -73,7 +73,7 @@ def test_slot_widget_dim_property_updates_on_unequip(qapp, session):
 def test_picker_rows_and_search(qapp, session):
     from app.gui.picker_dialog import PickerDialog
     rows = PickerDialog.equipment_rows(session, "weapon", 4252)
-    assert [r.name for r in rows] == ["測試武器"]
+    assert [r.name for r in rows] == ["測試武器[2]"]   # 一般格清單名帶洞數後綴
     assert PickerDialog.equipment_rows(session, "weapon", 4255) == []
     pool = session.enchant_pools(2001)[0]
     erows = PickerDialog.enchant_rows(session, pool)
@@ -179,7 +179,7 @@ def test_costume_slot_holds_stone_directly(qapp, session, monkeypatch):
     panel = BuildPanel("A", session)
     panel.apply_item("costume_top", 29001)
     w = panel.slot_widgets["costume_top"]
-    assert "測試石(頭上)" in w.name_label.text()
+    assert w.name_label.text() == "測試石(頭上)"   # 服飾格不帶洞數後綴
     assert w.chip_buttons() == []
     assert panel.build.slots["costume_top"].cards == []
 

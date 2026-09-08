@@ -40,6 +40,11 @@ def test_enchant_pools_probability(session):
 def test_display_helpers(session):
     assert session.item_display(2001) == "測試鎧甲"
     assert session.item_display(42) == "item:42"
+    # 可插卡裝備名尾端加[N], 無洞不加, 查無資料同item_display
+    assert session.equipment_display(2001) == "測試鎧甲[1]"
+    assert session.equipment_display(1001) == "測試武器[2]"
+    assert session.equipment_display(29001) == "測試石(頭上)"
+    assert session.equipment_display(42) == "item:42"
     assert session.option_display("Opt_B") == "詞條B"
     assert session.option_display("Nope") == "Nope"
     assert session.describe_missing(["skill:5015"]) == ["技能「測試技能」等級"]

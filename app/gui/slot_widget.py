@@ -177,10 +177,11 @@ class SlotWidget(QFrame):
 
         self.name_label.setProperty("dim", False)
         _repolish(self.name_label)
-        self.name_label.setText(session.item_display(cfg.item_id))
-
         is_costume = self.slot_key in COSTUME_SLOTS
         is_general = self.slot_key in GENERAL_SLOTS
+        # 一般格裝備名帶「[N]」洞數後綴; 服飾(石頭)/影子裝備不可插卡, 不帶
+        display = session.equipment_display(cfg.item_id) if is_general else session.item_display(cfg.item_id)
+        self.name_label.setText(display)
 
         if not is_costume:
             # controller ruling(fix round1第3點, 覆蓋brief規則2原本的"refine>0才

@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.gui.item_text import description_to_html
-from app.gui.slot_widget import SLOT_LABELS
+from app.gui.slot_widget import GENERAL_SLOTS, SLOT_LABELS
 
 CLEAR = object()  # 「清除」哨兵 — 使用者按「清除」選取的result, 呼叫端解讀成刪除該格內容
 
@@ -136,6 +136,10 @@ class PickerDialog(QDialog):
     @staticmethod
     def equipment_rows(session, slot_key: str, job_id: int | None) -> list[PickRow]:
         entries = session.equipment_for_slot(slot_key, job_id=job_id)
+        # 一般格清單名帶「[N]」洞數後綴(同SlotWidget), 影子裝備格不帶
+        if slot_key in GENERAL_SLOTS:
+            return [PickRow(e.item_id, session.equipment_display(e.item_id), "", description_to_html(e.description))
+                    for e in entries]
         return [PickRow(e.item_id, e.display_name, "", description_to_html(e.description)) for e in entries]
 
     @staticmethod
