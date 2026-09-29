@@ -423,3 +423,41 @@ def test_chips_wrap_to_second_row_when_first_row_too_narrow(qapp, session):
 
     w.set_config(None, session)
     assert w.chips_on_second_row is False
+
+
+def test_combo_hover_splits_body_and_card_and_tooltip_lists_combo(qapp, session):
+    """2026-09-29驗收裁決: 懸停裝備名只亮本體的套裝、懸停卡片chip只亮那張卡
+    的套裝, 格子其他地方不亮; 成立套裝列在tooltip最上方並標出夥伴所在部位。
+    這裡把測試卡片插在武器(武器本體無套裝), 套裝夥伴測試鎧甲在鎧甲格。"""
+    from PySide6.QtCore import QEvent
+    from PySide6.QtWidgets import QApplication
+    from app.core.build import SlotConfig
+    from app.gui.build_panel import BuildPanel
+    panel = BuildPanel("A", session)
+    panel.apply_item("armor", 2001)
+    panel.apply_item("weapon", 1001)
+    panel.build.slots["weapon"] = SlotConfig(item_id=1001, cards=[3001])
+    panel.refresh()
+    armor, weapon = panel.slot_widgets["armor"], panel.slot_widgets["weapon"]
+    lit = lambda: {k for k, w in panel.slot_widgets.items() if w.property("highlight")}
+
+    QApplication.sendEvent(weapon.name_label, QEvent(QEvent.Type.Enter))
+    assert lit() == set()
+    QApplication.sendEvent(weapon.name_label, QEvent(QEvent.Type.Leave))
+
+    card_chip = next(c for c in weapon.chip_buttons() if c.text() == "測試卡片")
+    QApplication.sendEvent(card_chip, QEvent(QEvent.Type.Enter))
+    assert lit() == {"armor", "weapon"}
+    QApplication.sendEvent(card_chip, QEvent(QEvent.Type.Leave))
+    assert lit() == set()
+
+    QApplication.sendEvent(armor.name_label, QEvent(QEvent.Type.Enter))
+    assert lit() == {"armor", "weapon"}
+    QApplication.sendEvent(armor.name_label, QEvent(QEvent.Type.Leave))
+
+    line = "測試鎧甲(鎧甲) + 測試卡片(武器)"
+    assert "成立套裝" in armor.name_label.toolTip() and line in armor.name_label.toolTip()
+    assert "鎧甲" in armor.name_label.toolTip().split("<hr>")[1]   # 敘述仍在套裝段之後
+    assert line in card_chip.toolTip()
+    assert "成立套裝" not in weapon.name_label.toolTip()
+

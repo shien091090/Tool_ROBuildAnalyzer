@@ -65,6 +65,13 @@ def test_active_combo_members(session):
     assert session.active_combo_members(b, 1001) == set()
 
 
+def test_active_combos_lists_each_combo(session):
+    a = session.load_build(session.builds_dir / "a.json")
+    assert session.active_combos(a, 3001) == [[2001, 3001]]
+    b = session.load_build(session.builds_dir / "b.json")
+    assert session.active_combos(b, 1001) == []
+
+
 def test_slot_count_of(session):
     """I6: session.slot_count_of — 查無item_id時退回0, 不讓GUI直接碰
     session.catalog.get()。"""

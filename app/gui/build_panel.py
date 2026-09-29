@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
 from app.core.build import Build, CostTargets, SlotConfig, new_build
 from app.gui.cost_targets_dialog import CostTargetsDialog
 from app.gui.picker_dialog import CLEAR, PickerDialog
-from app.gui.slot_widget import COSTUME_SLOTS, GENERAL_SLOTS, SLOT_SECTIONS, SlotWidget
+from app.gui.slot_widget import COSTUME_SLOTS, GENERAL_SLOTS, SLOT_LABELS, SLOT_SECTIONS, SlotWidget
 
 _TAG_COLORS = {"A": "#7ec3e8", "B": "#cf9ee8"}
 _UNSAVED_ENTRY = "(未儲存新配裝)"
@@ -121,7 +121,7 @@ class BuildPanel(QFrame):
         widget.add_enchant_clicked.connect(lambda sk=slot_key: self._on_add_enchant_clicked(sk))
         widget.clear_requested.connect(lambda sk=slot_key: self.apply_item(sk, None))
         widget.cost_targets_requested.connect(lambda sk=slot_key: self._on_cost_targets_requested(sk))
-        widget.hovered.connect(lambda on, sk=slot_key: self._on_slot_hovered(sk, on))
+        widget.combo_hovered.connect(self._on_combo_hovered)
 
     def _reload_file_combo(self) -> None:
         """fix round1第1點: clear()/第一個addItem()各自會發出
@@ -159,7 +159,13 @@ class BuildPanel(QFrame):
 
     def refresh(self) -> None:
         for slot_key, widget in self.slot_widgets.items():
-            widget.set_config(self._build.slots.get(slot_key), self._session)
+            cfg = self._build.slots.get(slot_key)
+            widget.set_config(cfg, self._session)
+            # 重建chips時被懸停的chip直接刪掉收不到Leave, 高亮一律在這裡清掉
+            widget.set_highlight(False)
+            if cfg is not None:
+                widget.set_combo_info(self._combo_lines(cfg.item_id),
+                                      [self._combo_lines(c) for c in cfg.cards])
         suffix = "*" if self._dirty else ""
         self._tag_label.setText(f"{self._tag}{suffix}")
 
@@ -370,17 +376,21 @@ class BuildPanel(QFrame):
         if accepted:
             self.apply_cost_targets(slot_key, ct)
 
-    def _on_slot_hovered(self, slot_key: str, on: bool) -> None:
-        if not on:
-            for widget in self.slot_widgets.values():
-                widget.set_highlight(False)
-            return
-        cfg = self._build.slots.get(slot_key)
-        if cfg is None:
-            return
-        members: set[int] = set()
-        for item_id in [cfg.item_id, *cfg.cards]:
-            members |= self._session.active_combo_members(self._build, item_id)
+    def _combo_lines(self, item_id: int) -> list[str]:
+        """item_id成立的套裝, 每條「名稱(部位) + 名稱(部位)」; 同一件出現在多格
+        (如兩個飾品插同一張卡)部位以「/」併列。"""
+        lines = []
+        for members in self._session.active_combos(self._build, item_id):
+            parts = []
+            for m in members:
+                where = [label for k, label in SLOT_LABELS.items()
+                         if (c := self._build.slots.get(k)) is not None and (c.item_id == m or m in c.cards)]
+                parts.append(f"{self._session.item_display(m)}({'/'.join(where)})")
+            lines.append(" + ".join(parts))
+        return lines
+
+    def _on_combo_hovered(self, item_id: int | None) -> None:
+        members = set() if item_id is None else self._session.active_combo_members(self._build, item_id)
         for other_key, widget in self.slot_widgets.items():
             other_cfg = self._build.slots.get(other_key)
             highlight = other_cfg is not None and (

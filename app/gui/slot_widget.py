@@ -19,8 +19,14 @@ chips規則(T5只畫, T6接點擊事件):
 
 grade_label只有GENERAL_SLOTS的格才顯示(服飾/影子裝備沒有升階概念); grade
 為"none"時同樣不顯示(沒升階=不畫這個標籤, 不是畫一個空字)。
+
+套裝(2026-09-29驗收裁決): 懸停裝備名只看本體的套裝、懸停卡片chip只看那張卡的
+套裝(combo_hovered帶item_id, 離開帶None), 格子其他地方不觸發高亮 — 本體與卡片
+的套裝混在一起亮會看不出哪格跟哪個套裝走。成立的套裝另列在各自tooltip最上方。
 """
-from PySide6.QtCore import Qt, Signal
+import html
+
+from PySide6.QtCore import QEvent, QObject, Qt, Signal
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMenu, QToolButton, QVBoxLayout, QWidget
 
 from app.gui.item_text import description_to_html
@@ -71,6 +77,7 @@ _MENU_REFINE_TEXT = "設定精煉…"
 _MENU_GRADE_TEXT = "設定階級…"
 _MENU_CLEAR_TEXT = "清空此格"
 _MENU_COST_TARGETS_TEXT = "成本設定…"
+_COMBO_HEADER = "成立套裝"
 
 
 def _make_chip(text: str, object_name: str) -> QToolButton:
@@ -101,6 +108,31 @@ def _repolish(widget) -> None:
     widget.style().polish(widget)
 
 
+def _tooltip_html(combo_lines: list[str], desc_html: str) -> str:
+    """套裝段放最上面(道具敘述常很長, 放後面會被擠到看不見), 與敘述以<hr>分隔。"""
+    if not combo_lines:
+        return desc_html
+    items = "<br>".join(f"・{html.escape(line)}" for line in combo_lines)
+    combo_html = f"<b>{_COMBO_HEADER}</b><br>{items}"
+    return f"{combo_html}<hr>{desc_html}" if desc_html else combo_html
+
+
+class _HoverWatcher(QObject):
+    """裝在name_label/卡片chip上, Enter/Leave轉成callback(item_id或None)。"""
+
+    def __init__(self, parent: QObject, item_id: int, callback):
+        super().__init__(parent)
+        self._item_id = item_id
+        self._callback = callback
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() == QEvent.Type.Enter:
+            self._callback(self._item_id)
+        elif event.type() == QEvent.Type.Leave:
+            self._callback(None)
+        return False
+
+
 class SlotWidget(QFrame):
     item_clicked = Signal()
     refine_clicked = Signal()
@@ -111,7 +143,7 @@ class SlotWidget(QFrame):
     add_enchant_clicked = Signal()
     clear_requested = Signal()
     cost_targets_requested = Signal()
-    hovered = Signal(bool)
+    combo_hovered = Signal(object)  # 懸停的item_id(本體或卡片), 離開時None
 
     def __init__(self, slot_key: str, parent: QWidget | None = None):
         super().__init__(parent)
@@ -165,6 +197,9 @@ class SlotWidget(QFrame):
         self._chips_on_second_row = False
 
         self._cfg = None
+        self._desc_html = ""
+        self._name_watcher: _HoverWatcher | None = None
+        self._card_chips: list[QToolButton] = []
 
     @property
     def chips_on_second_row(self) -> bool:
@@ -218,15 +253,27 @@ class SlotWidget(QFrame):
                 w.setParent(None)
                 w.deleteLater()
 
-    def _add_chip(self, text: str, object_name: str, on_click=None) -> None:
+    def _add_chip(self, text: str, object_name: str, on_click=None) -> QToolButton:
         btn = _make_chip(text, object_name)
         if on_click is not None:
             btn.clicked.connect(on_click)
         self._chips_layout.addWidget(btn)
+        return btn
+
+    def _set_name_watcher(self, item_id: int | None) -> None:
+        if self._name_watcher is not None:
+            self.name_label.removeEventFilter(self._name_watcher)
+            self._name_watcher.deleteLater()
+            self._name_watcher = None
+        if item_id is not None:
+            self._name_watcher = _HoverWatcher(self, item_id, self.combo_hovered.emit)
+            self.name_label.installEventFilter(self._name_watcher)
 
     def set_config(self, cfg, session) -> None:
         self._cfg = cfg
         self._clear_chips()
+        self._card_chips = []
+        self._desc_html = ""
 
         has_cost_targets = cfg is not None and cfg.cost_targets is not None
         self.slot_label.setText(SLOT_LABELS[self.slot_key] + (_COST_TARGETS_MARKER if has_cost_targets else ""))
@@ -234,6 +281,7 @@ class SlotWidget(QFrame):
         if cfg is None:
             self.name_label.setText(_UNEQUIPPED_TEXT)
             self.name_label.setToolTip("")
+            self._set_name_watcher(None)
             self.name_label.setProperty("dim", True)
             _repolish(self.name_label)
             self.refine_label.setVisible(False)
@@ -249,7 +297,9 @@ class SlotWidget(QFrame):
         display = session.equipment_display(cfg.item_id) if is_general else session.item_display(cfg.item_id)
         self.name_label.setText(display)
         # 懸停裝備名顯示與選擇清單相同的敘述tooltip(2026-09-08驗收需求)
-        self.name_label.setToolTip(description_to_html(session.item_description(cfg.item_id)))
+        self._desc_html = description_to_html(session.item_description(cfg.item_id))
+        self.name_label.setToolTip(self._desc_html)
+        self._set_name_watcher(cfg.item_id)
 
         if not is_costume:
             # controller ruling(fix round1第3點, 覆蓋brief規則2原本的"refine>0才
@@ -273,8 +323,10 @@ class SlotWidget(QFrame):
 
     def _fill_general_chips(self, cfg, session) -> None:
         for i, card_id in enumerate(cfg.cards):
-            self._add_chip(session.item_display(card_id), "chip_card",
-                            lambda _checked=False, i=i: self.card_clicked.emit(i))
+            chip = self._add_chip(session.item_display(card_id), "chip_card",
+                                  lambda _checked=False, i=i: self.card_clicked.emit(i))
+            chip.installEventFilter(_HoverWatcher(chip, card_id, self.combo_hovered.emit))
+            self._card_chips.append(chip)
         slot_count = session.slot_count_of(cfg.item_id)
         if slot_count > len(cfg.cards):
             self._add_chip(_ADD_CARD_TEXT, "chip_add", self.add_card_clicked.emit)
@@ -289,20 +341,21 @@ class SlotWidget(QFrame):
         if len(pools) > filled:
             self._add_chip(_ADD_ENCHANT_TEXT, "chip_add", self.add_enchant_clicked.emit)
 
+    def set_combo_info(self, name_lines: list[str], card_lines: list[list[str]]) -> None:
+        """在set_config之後呼叫: 把成立套裝列進裝備名/各卡片chip的tooltip。
+        card_lines與cfg.cards同序; 套裝要看整套build, 所以由BuildPanel算好傳進來。"""
+        if self._cfg is None:
+            return
+        self.name_label.setToolTip(_tooltip_html(name_lines, self._desc_html))
+        for chip, lines in zip(self._card_chips, card_lines):
+            chip.setToolTip(_tooltip_html(lines, ""))
+
     def set_highlight(self, on: bool) -> None:
         self.setProperty("highlight", on)
         _repolish(self)
 
     def chip_buttons(self) -> list[QToolButton]:
         return [self._chips_layout.itemAt(i).widget() for i in range(self._chips_layout.count())]
-
-    def enterEvent(self, event) -> None:
-        self.hovered.emit(True)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event) -> None:
-        self.hovered.emit(False)
-        super().leaveEvent(event)
 
     def contextMenuEvent(self, event) -> None:
         """「設定精煉…」/「設定階級…」放在「清空此格」前面, 與點擊精煉/階級數字

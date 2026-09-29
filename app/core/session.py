@@ -178,10 +178,11 @@ class AnalyzerSession:
     def unclassified_count(self) -> int:
         return self.catalog.unclassified_count()
 
-    def active_combo_members(self, build: Build, item_id: int) -> set[int]:
-        """item_id所屬、且成員全在build已裝(本體+卡片)的所有combo成員id聯集(GUI hover套裝高亮用)。
+    def active_combos(self, build: Build, item_id: int) -> list[list[int]]:
+        """item_id所屬、且成員全在build已裝(本體+卡片)的combo, 每個回傳成員id清單
+        (依combi_ids順序; GUI套裝tooltip逐條列出用)。
 
-        查無該item/該item沒有combi_ids/成員未全裝滿 → set()(不成立, 不高亮)。
+        查無該item/該item沒有combi_ids/成員未全裝滿 → [](不成立)。
         """
         equipped = set()
         for cfg in build.slots.values():
@@ -189,13 +190,17 @@ class AnalyzerSession:
             equipped.update(cfg.cards)
         rec = self.reader.item(item_id)
         if rec is None or not rec.combi_ids:
-            return set()
-        members_all: set[int] = set()
+            return []
+        result: list[list[int]] = []
         for combo_id in rec.combi_ids:
             combo = self.reader.combo(combo_id)
             if combo is None:
                 continue
             members, _src = combo
             if members and set(members).issubset(equipped):
-                members_all.update(members)
-        return members_all
+                result.append(list(members))
+        return result
+
+    def active_combo_members(self, build: Build, item_id: int) -> set[int]:
+        """active_combos的成員id聯集(GUI hover套裝高亮用)。"""
+        return {m for members in self.active_combos(build, item_id) for m in members}
