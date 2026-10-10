@@ -1,0 +1,15 @@
+{
+  "name": "使用者測試配置",
+  "slots": {
+    "head_top": { "item_id": 18849, "refine": 11, "cards": [4598] },
+    "head_mid": { "item_id": 18913, "cards": [4403] },
+    "head_low": { "item_id": 18926 },
+    "armor":    { "item_id": 450179, "refine": 12, "cards": [4392] },
+    "weapon":   { "item_id": 550079, "refine": 13 },
+    "shield":   { "item_id": 28942, "refine": 10, "cards": [4609] },
+    "garment":  { "item_id": 20966, "refine": 7, "cards": [300269] },
+    "shoes":    { "item_id": 470074, "refine": 11, "cards": [4658] },
+    "acc_r":    { "item_id": 32237, "cards": [300141] },
+    "acc_l":    { "item_id": 2980, "cards": [300141] }
+  }
+}

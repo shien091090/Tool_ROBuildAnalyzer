@@ -5,15 +5,34 @@
       "item_id": 450263,
       "refine": 13,
       "grade": "A",
-      "cards": [4001],
-      "enchants": ["Inteligence5"],
+      "cards": [
+        4001
+      ],
+      "enchants": [
+        "Inteligence5"
+      ],
       "cost_targets": {
         "refine_from": 0,
         "grade_from": "none",
-        "refine_table": "ether_armor2",
         "enchant_strategy": "stop_when_hit",
-        "enchant_goal": [3, "Inteligence5"]
+        "refine_table": "ether_armor2",
+        "enchant_goal": [
+          3,
+          "Inteligence5"
+        ]
       }
+    },
+    "head_top": {
+      "item_id": 19261,
+      "cards": [
+        300244
+      ]
+    },
+    "head_mid": {
+      "item_id": 18575
+    },
+    "head_low": {
+      "item_id": 5053
     }
   }
 }

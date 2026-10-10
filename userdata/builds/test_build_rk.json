@@ -1,0 +1,150 @@
+{
+  "name": "測試配裝(盧恩騎士)",
+  "slots": {
+    "head_top": {
+      "item_id": 400227,
+      "refine": 12,
+      "cards": [
+        4582
+      ],
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "armor_lv1"
+      }
+    },
+    "head_mid": {
+      "item_id": 410211
+    },
+    "armor": {
+      "item_id": 450295,
+      "refine": 13,
+      "grade": "A",
+      "cards": [
+        4302
+      ],
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "ether_armor2"
+      }
+    },
+    "weapon": {
+      "item_id": 600024,
+      "refine": 12,
+      "grade": "B",
+      "cards": [
+        27361,
+        27361
+      ],
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "ether_weapon5"
+      }
+    },
+    "garment": {
+      "item_id": 20967,
+      "refine": 12,
+      "cards": [
+        4593
+      ],
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "armor_lv1"
+      }
+    },
+    "shoes": {
+      "item_id": 470073,
+      "refine": 12,
+      "grade": "C",
+      "cards": [
+        4381
+      ],
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "ether_armor2"
+      }
+    },
+    "acc_r": {
+      "item_id": 490491,
+      "cards": [
+        300484
+      ]
+    },
+    "acc_l": {
+      "item_id": 2936,
+      "cards": [
+        300101
+      ]
+    },
+    "costume_top": {
+      "item_id": 310258
+    },
+    "costume_mid": {
+      "item_id": 310882
+    },
+    "costume_low": {
+      "item_id": 310883
+    },
+    "costume_garment": {
+      "item_id": 29463
+    },
+    "shadow_armor": {
+      "item_id": 24764,
+      "refine": 10,
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "shadow_armor"
+      }
+    },
+    "shadow_gauntlet": {
+      "item_id": 24449,
+      "refine": 10,
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "shadow_gauntlet"
+      }
+    },
+    "shadow_shield": {
+      "item_id": 24447,
+      "refine": 10,
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "shadow_gauntlet"
+      }
+    },
+    "shadow_shoes": {
+      "item_id": 24763,
+      "refine": 10,
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "shadow_armor"
+      }
+    },
+    "shadow_earring": {
+      "item_id": 24451,
+      "refine": 10,
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "shadow_gauntlet"
+      }
+    },
+    "shadow_pendant": {
+      "item_id": 24450,
+      "refine": 10,
+      "cost_targets": {
+        "refine_from": 0,
+        "grade_from": "none",
+        "refine_table": "shadow_gauntlet"
+      }
+    }
+  }
+}
