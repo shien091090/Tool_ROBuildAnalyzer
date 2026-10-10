@@ -21,4 +21,4 @@ RO配裝分析工具。接手前先讀:
 ## 與使用者協作
 
 - **重開/關掉 GUI 前先請使用者存檔**: 曾直接 kill 舊視窗弄丟使用者未存的配裝。使用者電腦記憶體吃緊, 背景開的 GUI 會被回收, GUI 建議由使用者自己開
-- `userdata/builds/test_build*.json`、`userdata/characters/test_rk.json` 是使用者的實測檔, 未版控, 不要動
+- `userdata/builds/test_build*.json`、`userdata/characters/test_rk.json` 是使用者的實測檔, 內容由使用者維護, 不要自己改
